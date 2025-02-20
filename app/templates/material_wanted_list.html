@@ -1,0 +1,221 @@
+<!-- app/templates/material_wanted_list.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>希望端材一覧 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/material_wanted_list.css') }}">
+    <style>
+    </style>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="content">
+        <h1>希望端材一覧</h1>
+
+        <div class="button-group">
+            <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+        </div>
+
+        <!-- タブヘッダー -->
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'Unmatched')">マッチしていない希望端材</button>
+            <button class="tablinks" onclick="openTab(event, 'MatchedUncompleted')">マッチしているが未完了の希望端材</button>
+            <button class="tablinks" onclick="openTab(event, 'Completed')">完了済みの希望端材</button>
+        </div>
+
+        <!-- マッチしていない希望端材 タブコンテンツ -->
+        <div id="Unmatched" class="tabcontent" style="display: block;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>材種</th>
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <!-- <th>場所</th> この行を削除 -->
+                        <th>登録日</th>
+                        <th>締切日</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for wanted_material in unmatched_wanted_materials %}
+                    <tr data-wanted-material-id="{{ wanted_material.id }}" data-deadline="{{ wanted_material.deadline.isoformat() if wanted_material.deadline else '' }}">
+                        <td class="type">{{ wanted_material.type }}</td>
+                        <td class="category">
+                            {% if wanted_material.type == "木材" %}
+                                {{ wanted_material.wood_type or "" }}
+                            {% elif wanted_material.type == "ボード材" %}
+                                {{ wanted_material.board_material_type or "" }}
+                            {% elif wanted_material.type == "パネル材" %}
+                                {{ wanted_material.panel_type or "" }}
+                            {% else %}
+                                <!-- その他の材種 -->
+                            {% endif %}
+                        </td>
+                        <td class="quantity">{{ wanted_material.quantity }}</td>
+                        <td class="size">
+                            {% if wanted_material.size_1 == 0.0 and wanted_material.size_2 == 0.0 and wanted_material.size_3 == 0.0 %}
+                                指定なし
+                            {% else %}
+                                {{ wanted_material.size_1 }} × {{ wanted_material.size_2 }} × {{ wanted_material.size_3 }}
+                            {% endif %}
+                        </td>
+                        <!-- <td class="location"> ... </td> この行を削除 -->
+                        <td class="created_at">{{ wanted_material.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="deadline">
+                            {{ wanted_material.deadline.strftime('%Y-%m-%d %H:%M:%S') if wanted_material.deadline else '未設定' }}
+                        </td>
+                        <td class="note">
+                            {{ wanted_material.note or "" }}
+                        </td>
+                        <td class="action-buttons">
+                            <button class="edit-button btn btn-primary" onclick="editWantedRow(this)">編集</button>
+                            <button class="delete-button btn btn-danger" onclick="deleteWantedMaterial(this, '{{ wanted_material.id }}')">削除</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- マッチしているが未完了の希望端材 タブコンテンツ -->
+        <div id="MatchedUncompleted" class="tabcontent">
+            <table>
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>材種</th>
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <!-- <th>場所</th> この行を削除 -->
+                        <th>締切日</th>
+                        <th>マッチ日時</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for wanted_material, request in matched_uncompleted_wanted_materials %}
+                    <tr data-wanted-material-id="{{ wanted_material.id }}" data-request-id="{{ request.id }}" data-deadline="{{ wanted_material.deadline.isoformat() if wanted_material.deadline else '' }}">
+                        <td class="type">{{ wanted_material.type }}</td>
+                        <td class="category">
+                            {% if wanted_material.type == "木材" %}
+                                {{ wanted_material.wood_type or "" }}
+                            {% elif wanted_material.type == "ボード材" %}
+                                {{ wanted_material.board_material_type or "" }}
+                            {% elif wanted_material.type == "パネル材" %}
+                                {{ wanted_material.panel_type or "" }}
+                            {% else %}
+                                <!-- その他の材種 -->
+                            {% endif %}
+                        </td>
+                        <td class="quantity">{{ wanted_material.quantity }}</td>
+                        <td class="size">
+                            {% if wanted_material.size_1 == 0.0 and wanted_material.size_2 == 0.0 and wanted_material.size_3 == 0.0 %}
+                                指定なし
+                            {% else %}
+                                {{ wanted_material.size_1 }} × {{ wanted_material.size_2 }} × {{ wanted_material.size_3 }}
+                            {% endif %}
+                        </td>
+                        <!-- <td class="location"> ... </td> この行を削除 -->
+                        <td class="deadline">
+                            {{ wanted_material.deadline.strftime('%Y-%m-%d %H:%M:%S') if wanted_material.deadline else '未設定' }}
+                        </td>
+                        <td class="matched_at">{{ wanted_material.matched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="note">
+                            {{ wanted_material.note or "" }}
+                        </td>
+                        <td class="action-buttons">
+                            <!-- 操作列を削除 -->
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 完了済みの希望端材 タブコンテンツ -->
+        <div id="Completed" class="tabcontent">
+            <table>
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>材種</th>
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <!-- <th>場所</th> この行を削除 -->
+                        <th>登録日</th>
+                        <th>完了日</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for wanted_material in completed_wanted_materials %}
+                    <tr data-wanted-material-id="{{ wanted_material.id }}" data-deadline="{{ wanted_material.deadline.isoformat() if wanted_material.deadline else '' }}">
+                        <td class="type">{{ wanted_material.type }}</td>
+                        <td class="category">
+                            {% if wanted_material.type == "木材" %}
+                                {{ wanted_material.wood_type or "" }}
+                            {% elif wanted_material.type == "ボード材" %}
+                                {{ wanted_material.board_material_type or "" }}
+                            {% elif wanted_material.type == "パネル材" %}
+                                {{ wanted_material.panel_type or "" }}
+                            {% else %}
+                                <!-- その他の材種 -->
+                            {% endif %}
+                        </td>
+                        <td class="quantity">{{ wanted_material.quantity }}</td>
+                        <td class="size">
+                            {% if wanted_material.size_1 == 0.0 and wanted_material.size_2 == 0.0 and wanted_material.size_3 == 0.0 %}
+                                指定なし
+                            {% else %}
+                                {{ wanted_material.size_1 }} × {{ wanted_material.size_2 }} × {{ wanted_material.size_3 }}
+                            {% endif %}
+                        </td>
+                        <!-- <td class="location"> ... </td> この行を削除 -->
+                        <td class="created_at">{{ wanted_material.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="completed_at">{{ wanted_material.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="note">
+                            {{ wanted_material.note or "" }}
+                        </td>
+                        <td class="action-buttons">
+                            <form method="POST" action="{{ url_for('materials.delete_history_wanted_material', material_id=wanted_material.id) }}" onsubmit="return confirm('対象の履歴を削除してもよろしいですか。');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-warning">履歴削除</button>
+                            </form>
+                            <!-- 「編集」ボタンを削除 -->
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- モーダル -->
+    <div id="deadlineModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <p>締切日を過ぎている端材が存在します。締切日を変更するか、端材を削除してください。</p>
+        </div>
+    </div>
+
+    <!-- ロードインジケーター -->
+    <div id="loading-indicator">
+        <p>処理中...</p>
+    </div>
+
+    <!-- Pass AJAX URLs to JavaScript -->
+    <script>
+        // 編集用 AJAX URL のベースをテンプレートで生成（wanted_material_id=0 をプレースホルダーとして使用）
+        const editWantedMaterialAjaxBaseUrl = "{{ url_for('materials.edit_wanted_material_ajax', wanted_material_id=0) }}";
+        const deleteWantedMaterialAjaxBaseUrl = "{{ url_for('materials.delete_wanted_material_ajax', wanted_material_id=0) }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/material_wanted_list.js') }}"></script>
+</body>
+</html>

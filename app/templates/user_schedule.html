@@ -1,0 +1,319 @@
+<!-- user_schedule.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スケジュール管理 | はざいっぽ</title>
+    <link rel="stylesheet" href="/static/css/user_schedule.css">
+    <script src="/static/js/user_schedule.js"></script>
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>日程選択</h1>
+    <main>
+        <div class="container">
+            <!-- 部屋選択 -->
+            <section id="room-selection">
+                <h2>部屋選択</h2>
+                <select id="room-list" onchange="updateSchedule()">
+                    {% for room in rooms %}
+                        <option value="{{ room.id }}">{{ room.room_number }}</option>
+                    {% endfor %}
+                </select>
+            </section>
+        </div>
+        
+        <div class="container">
+            <!-- 日程選択 -->
+            <section id="date-selection-section">
+                <h2>利用日選択</h2>
+                <select id="date-list" onchange="updateSchedule()">
+                    <!-- 今日から30日先までのオプションを動的に生成 -->
+                </select>
+            </section>
+        </div>
+        
+        <div class="container">
+            <!-- 日程表示 -->
+            <section id="schedule-display">
+                <h2>利用時間選択</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>予約</th>
+                            <th>時間</th>
+                            <th>状況</th>
+                        </tr>
+                    </thead>
+                    <tbody id="schedule-table">
+                        <!-- 9:00〜23:00の時間帯とその状況を表示 -->
+                    </tbody>
+                </table>
+                
+                <!-- 左下に戻るボタンを配置 -->
+                <div class="back-button-container">
+                    <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+                </div>
+            </section>
+        </div>
+        
+        <!-- 予約確認ダイアログ -->
+        <div id="reservation-dialog" style="display:none;">
+            <p>下記日程で予約をしますか？</p>
+            <p id="selected-date-time"></p>
+            <label>
+                <input type="checkbox" id="request-lecture-checkbox" onchange="toggleLectureSelection()"> レクチャーを依頼する
+            </label>
+            <div id="lecture-selection" style="display:none;">
+                <p>レクチャー担当を選択してください:</p>
+                <select id="lecturer-list">
+                    <!-- 利用可能なレクチャー担当がここに動的に挿入されます -->
+                </select>
+            </div>
+            <button id="confirm-reservation" onclick="confirmReservation()">確定</button>
+            <button id="cancel-reservation" onclick="cancelReservation()">キャンセル</button>
+        </div>
+        
+        <div id="reservation-confirmation" style="display:none;">
+            <p>ターミナルの予約が確定しました。</p>
+        </div>
+    </main>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM fully loaded and parsed");
+            document.getElementById('room-list').selectedIndex = 0;
+            populateDateOptions();
+            updateSchedule();
+        });
+
+        // 日程オプションを生成する関数
+        function populateDateOptions() {
+            const dateList = document.getElementById('date-list');
+            const today = "{{ selected_date }}"; // サーバーから渡された選択日
+            const startDate = new Date(today);
+            for (let i = 0; i < 30; i++) {
+                const dateOption = document.createElement('option');
+                const futureDate = new Date(startDate);
+                futureDate.setDate(startDate.getDate() + i);
+                const year = futureDate.getFullYear();
+                const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+                const day = String(futureDate.getDate()).padStart(2, '0');
+                const formattedDate = `${year}-${month}-${day}`;
+                dateOption.value = formattedDate;
+                dateOption.textContent = formattedDate;
+                dateList.appendChild(dateOption);
+            }
+            console.log("Date options populated");
+            // デフォルトの日付を選択
+            dateList.value = today;
+        }
+
+        // サーバーから予約済み時間を取得してスケジュールを更新する
+        function updateSchedule() {
+            const roomId = document.getElementById('room-list').value;
+            const selectedDate = document.getElementById('date-list').value;
+            const currentTime = new Date();
+            
+            console.log(`Fetching schedule for room_id=${roomId} and date=${selectedDate}`);
+            
+            fetch(`/terminal/get_schedule?room_id=${roomId}&date=${selectedDate}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Network response was not ok (${response.status})`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Received data:", data);
+                    if (data.status !== 'success') {
+                        throw new Error(`Server error: ${data.message}`);
+                    }
+                    
+                    const scheduleTable = document.getElementById('schedule-table');
+                    scheduleTable.innerHTML = '';
+                    
+                    const timeSlots = [
+                        '09:00 ~ 10:00',
+                        '10:00 ~ 11:00',
+                        '11:00 ~ 12:00',
+                        '12:00 ~ 13:00',
+                        '13:00 ~ 14:00',
+                        '14:00 ~ 15:00',
+                        '15:00 ~ 16:00',
+                        '16:00 ~ 17:00',
+                        '17:00 ~ 18:00',
+                        '18:00 ~ 19:00',
+                        '19:00 ~ 20:00',
+                        '20:00 ~ 21:00',
+                        '21:00 ~ 22:00',
+                        '22:00 ~ 23:00'
+                    ];
+                    
+                    const reservedTimeSlots = data.schedule.map(res => res.time_slot);
+                    console.log("Reserved time slots:", reservedTimeSlots);
+                    
+                    timeSlots.forEach(time => {
+                        const row = document.createElement('tr');
+                        const reserveCell = document.createElement('td');
+                        const timeCell = document.createElement('td');
+                        const statusCell = document.createElement('td');
+                        
+                        const reserveButton = document.createElement('button');
+                        reserveButton.textContent = '予約する';
+                        reserveButton.classList.add('schedule-button');
+                        
+                        // 時間帯の開始時間を取得し、現在時刻と比較
+                        const [startTimeStr, endTimeStr] = time.split(' ~ ');
+                        const [startHour, startMinute] = startTimeStr.split(':').map(Number);
+                        
+                        const selectedDateTime = new Date(selectedDate);
+                        selectedDateTime.setHours(startHour, startMinute, 0, 0); // 正確に時間を設定
+                        
+                        console.log(`Current Time: ${currentTime}`);
+                        console.log(`Selected Date Time: ${selectedDateTime}`);
+                        
+                        if (reservedTimeSlots.includes(time) || currentTime > selectedDateTime) {
+                            // 予約済み、または開始時間を1分でも過ぎている場合
+                            row.classList.add('reserved-row'); // 追加クラス
+                            reserveButton.classList.add('reserved-button'); // 追加クラス
+                            reserveButton.disabled = true;
+                            statusCell.textContent = '予約対象外'; // ステータスを更新
+                        } else {
+                            statusCell.textContent = '空きあり';
+                            reserveButton.onclick = () => showReservationDialog(time);
+                        }
+                        
+                        reserveCell.appendChild(reserveButton);
+                        timeCell.textContent = time;
+                        row.appendChild(reserveCell);
+                        row.appendChild(timeCell);
+                        row.appendChild(statusCell);
+                        scheduleTable.appendChild(row);
+                    });
+                    console.log("Schedule table updated");
+                })
+                .catch(error => {
+                    console.error('Error fetching schedule:', error);
+                    alert(`スケジュールの取得中にエラーが発生しました: ${error.message}`);
+                });
+        }
+
+        function showReservationDialog(timeSlot) {
+            const selectedRoom = document.getElementById('room-list').value;
+            const selectedDate = document.getElementById('date-list').value;
+            
+            console.log(`Showing reservation dialog for ${selectedDate} ${timeSlot}`);
+            
+            document.getElementById('selected-date-time').textContent = `${selectedDate} ${timeSlot}`;
+            document.getElementById('reservation-dialog').style.display = 'block';
+            
+            window.reservationData = {
+                room_id: selectedRoom,
+                date: selectedDate,
+                time_slot: timeSlot
+            };
+            
+            // 利用可能なレクチャー担当者を取得してリストを更新
+            fetchAvailableLecturers(selectedDate, timeSlot);
+        }
+
+        function fetchAvailableLecturers(date, timeSlot) {
+            const [startTime, endTime] = timeSlot.split(' ~ ');
+            
+            console.log(`Fetching available lecturers for date=${date} and time=${startTime}`);
+            
+            fetch(`/terminal/available_lecturers?date=${date}&time=${startTime}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Network response was not ok (${response.status})`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Available lecturers:", data);
+                    const lecturerList = document.getElementById('lecturer-list');
+                    lecturerList.innerHTML = ''; // リストをクリア
+                    
+                    if (data.length === 0) {
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = '利用可能なレクチャー担当がいません';
+                        lecturerList.appendChild(option);
+                    } else {
+                        data.forEach(lecturer => {
+                            const option = document.createElement('option');
+                            option.value = lecturer.id;
+                            option.textContent = lecturer.contact_name;
+                            lecturerList.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching available lecturers:', error);
+                    alert(`レクチャー担当者の取得中にエラーが発生しました: ${error.message}`);
+                });
+        }
+
+        function confirmReservation() {
+            const reservationData = window.reservationData;
+            const requestLecture = document.getElementById('request-lecture-checkbox').checked;
+            const lecturerId = requestLecture ? document.getElementById('lecturer-list').value : null;
+            
+            console.log("Confirming reservation with data:", { 
+                ...reservationData, 
+                request_lecture: requestLecture, 
+                lecturer_id: lecturerId 
+            });
+            
+            reservationData.request_lecture = requestLecture;
+            reservationData.lecturer_id = lecturerId;
+            
+            fetch('/terminal/reservation', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify(reservationData)
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Network response was not ok (${response.status})`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Reservation response:", data);
+                    if (data.status === 'success') {
+                        document.getElementById('reservation-dialog').style.display = 'none';
+                        document.getElementById('reservation-confirmation').style.display = 'block';
+                        setTimeout(() => {
+                            document.getElementById('reservation-confirmation').style.display = 'none';
+                            window.location.href = "{{ url_for('dashboard.dashboard_home') }}";
+                        }, 3000);
+                    } else {
+                        alert(`Error: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('予約に失敗しました。サーバーエラーです。');
+                });
+        }
+
+        function cancelReservation() {
+            console.log("Reservation cancelled by user");
+            document.getElementById('reservation-dialog').style.display = 'none';
+        }
+
+        function toggleLectureSelection() {
+            const lectureSelection = document.getElementById('lecture-selection');
+            const isChecked = document.getElementById('request-lecture-checkbox').checked;
+            lectureSelection.style.display = isChecked ? 'block' : 'none';
+            console.log(`Lecture selection toggled to: ${isChecked ? 'visible' : 'hidden'}`);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!-- app/templates/lecturer_schedule_management.html -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <!-- 既存のヘッド内容はそのまま -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レクチャー担当スケジュール管理 | はざいっぽ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/lecturer_schedule_management.css') }}">
+    <style>
+    /* 追加のスタイル */
+    </style>
+    
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>レクチャー担当スケジュール管理</h1>
+    <div class="container">
+        <main>
+            <!-- リクエストリスト -->
+            <section id="request-list">
+                <h2>リクエストリスト</h2>
+                {% if incoming_requests %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ユーザー名</th>
+                            <th>日付</th>
+                            <th>時間</th>
+                            <th>アクション</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in incoming_requests %}
+                        {% if request.date > current_date or (request.date == current_date and request.start_time > current_time) %}
+                        <tr id="request-{{ request.id }}">
+                            <td>{{ request.user.contact_name }}</td>
+                            <td>{{ request.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ request.start_time.strftime('%H:%M') }} ~ {{ request.end_time.strftime('%H:%M') }}</td>
+                            <td>
+                                <button class="btn btn-primary" onclick="processRequest('{{ request.id }}', 'accept')">承諾</button>
+                                <button class="btn btn-danger" onclick="processRequest('{{ request.id }}', 'reject')">拒否</button>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>現在、受け取ったリクエストはありません。</p>
+                {% endif %}
+            </section>
+
+            <!-- 日程のドロップダウンとスケジュール管理のフォーム -->
+            <section id="schedule-management">
+                <h2>レクチャースケジュール管理</h2>
+                <form id="scheduleForm">
+                    {{ form.hidden_tag() }}
+
+                    <!-- 日付のドロップダウン -->
+                    <label for="selected_date">稼働可能日を選択</label>
+                    <select name="selected_date" id="selected_date" class="styled-select" onchange="loadSelectedDate()">
+                        {% for day in schedule_days %}
+                        <option value="{{ day.strftime('%Y-%m-%d') }}" {% if selected_date == day %} selected {% endif %}>
+                            {{ day.strftime('%Y-%m-%d') }}
+                        </option>
+                        {% endfor %}
+                    </select>
+
+                    <!-- 時間スロットのチェックボックス -->
+                    <div id="schedule-hours">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>稼働チェック欄</th>
+                                    <th>稼働時間</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for hour in schedule_hours %}
+                                {% set slot_time = datetime.strptime(hour.time.split(' ~ ')[0], '%H:%M').time() %}
+                                {% if selected_date == current_date %}
+                                    {% set is_past = slot_time <= current_time %}
+                                {% else %}
+                                    {% set is_past = False %}
+                                {% endif %}
+                                <tr class="{% if is_past %}disabled-row{% endif %}">
+                                    <td>
+                                        <input type="checkbox" name="time_slot" value="{{ hour.time }}" 
+                                        {% if 'time_slot_' ~ hour.time in form_data %} checked {% endif %}
+                                        {% if is_past %} disabled {% endif %}>
+                                    </td>
+                                    <td>{{ hour.time }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 全選択/全解除ボタン -->
+                    <button type="button" class="btn btn-secondary" onclick="checkAll(true)">全て選択</button>
+                    <button type="button" class="btn btn-secondary" onclick="checkAll(false)">全て解除</button>
+
+                    <!-- 予定送信ボタン -->
+                    <button type="button" class="btn btn-primary" onclick="submitSchedule()">予定を送信する</button>
+                </form>                                          
+            </section>
+
+            <!-- 戻るボタン -->
+            <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+        </main>
+    </div> <!-- .container -->
+
+    <!-- 稼働日程確定ダイアログ -->
+    <div id="confirm-dialog" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="cancelDialog()">&times;</span>
+            <p>稼働日程を確定しますがよろしいですか？</p>
+            <button type="button" class="btn btn-primary" onclick="confirmHours()">確定</button>
+            <button type="button" class="btn btn-secondary" onclick="cancelDialog()">キャンセル</button>
+        </div>
+    </div>
+
+    <!-- 確認完了ダイアログ -->
+    <div id="confirm-complete" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeCompleteModal()">&times;</span>
+            <p>スケジュールが正常に送信されました。</p>
+        </div>
+    </div>
+
+    <!-- 確認メッセージダイアログ -->
+    <div id="response-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeResponseModal()">&times;</span>
+            <p id="modal-message"></p>
+        </div>
+    </div>
+
+
+    <script>
+        // フォーム送信時に確認ダイアログを表示する関数
+        function submitSchedule() {
+            document.getElementById('confirm-dialog').classList.add('show');
+        }
+    
+        // 確認ダイアログで「確定」をクリックした際の処理
+        function confirmHours() {
+            document.getElementById('confirm-dialog').classList.remove('show');
+    
+            // フォームデータを収集
+            const form = document.getElementById('scheduleForm');
+            const formData = new FormData(form);
+            const data = {
+                selected_date: formData.get('selected_date'),
+                time_slot: formData.getAll('time_slot')
+            };
+    
+            // CSRFトークンを取得
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+            // AJAXリクエストを送信
+            fetch("{{ url_for('terminal.lecturer_schedule_management') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const modalMessage = document.getElementById('modal-message');
+                if (data.status === 'success') {
+                    modalMessage.textContent = data.message;
+                    // 確認完了モーダルを表示
+                    document.getElementById('confirm-complete').classList.add('show');
+                    
+                    // 2秒後に確認完了モーダルを非表示にし、ダッシュボードにリダイレクト
+                    setTimeout(function() {
+                        document.getElementById('confirm-complete').classList.remove('show');
+                        window.location.href = "{{ url_for('dashboard.dashboard_home') }}";
+                    }, 2000);
+                } else {
+                    modalMessage.textContent = data.message;
+                    // レスポンスモーダルを表示
+                    document.getElementById('response-modal').classList.add('show');
+
+                    // 2秒後にレスポンスモーダルを非表示
+                    setTimeout(function() {
+                        document.getElementById('response-modal').classList.remove('show');
+                    }, 2000);
+                }
+            })
+            .catch(error => {
+                console.error('Error submitting schedule:', error);
+                alert('スケジュールの送信中にエラーが発生しました。');
+            });
+        }
+    
+        // 確認ダイアログで「キャンセル」をクリックした際の処理
+        function cancelDialog() {
+            document.getElementById('confirm-dialog').classList.remove('show');
+        }
+    
+        // 確認完了モーダルを閉じる関数
+        function closeCompleteModal() {
+            document.getElementById('confirm-complete').classList.remove('show');
+        }
+    
+        // レスポンスモーダルを閉じる関数
+        function closeResponseModal() {
+            document.getElementById('response-modal').classList.remove('show');
+        }
+    
+        // リクエストを承諾または拒否する関数
+        function processRequest(requestId, action) {
+            if (!confirm(action === 'accept' ? 'このリクエストを承諾しますか？' : 'このリクエストを拒否しますか？')) {
+                return;
+            }
+    
+            // CSRFトークンを取得
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+            fetch(`/terminal/process_lecture_request`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    'request_id': requestId,
+                    'action': action
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const modalMessage = document.getElementById('modal-message');
+                if (data.status === 'success') {
+                    modalMessage.textContent = data.message;
+                    // 処理済みのリクエストをリストから削除
+                    const requestRow = document.getElementById(`request-${requestId}`);
+                    if (requestRow) {
+                        requestRow.remove();
+                    }
+                } else {
+                    modalMessage.textContent = data.message;
+                }
+                // レスポンスモーダルを表示
+                document.getElementById('response-modal').classList.add('show');
+
+                // 2秒後にダッシュボードにリダイレクト
+                setTimeout(function() {
+                    document.getElementById('response-modal').classList.remove('show');
+                    window.location.href = "{{ url_for('dashboard.dashboard_home') }}";
+                }, 2000);
+            })
+            .catch(error => {
+                console.error('Error processing request:', error);
+                alert('リクエストの処理中にエラーが発生しました。');
+            });
+        }
+    
+        // 全選択/全解除ボタンの機能
+        function checkAll(shouldCheck) {
+            const checkboxes = document.querySelectorAll('input[name="time_slot"]');
+            checkboxes.forEach(checkbox => {
+                if (!checkbox.disabled) {
+                    checkbox.checked = shouldCheck;
+                }
+            });
+        }
+
+        // 日付変更時にスケジュールをロードする関数
+        function loadSelectedDate() {
+            const selectedDate = document.getElementById('selected_date').value;
+
+            // CSRFトークンを取得
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+            // AJAXリクエストを送信
+            fetch("{{ url_for('terminal.get_schedule_hours') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ selected_date: selectedDate })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // スケジュール時間を更新
+                    const scheduleHoursDiv = document.getElementById('schedule-hours');
+                    let tableHTML = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>稼働チェック欄</th>
+                                    <th>稼働時間</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    data.schedule_hours.forEach(hour => {
+                        let disabledAttr = hour.is_past ? 'disabled' : '';
+                        let checkedAttr = hour.checked ? 'checked' : '';
+                        tableHTML += `
+                            <tr class="${hour.is_past ? 'disabled-row' : ''}">
+                                <td>
+                                    <input type="checkbox" name="time_slot" value="${hour.time}" ${checkedAttr} ${disabledAttr}>
+                                </td>
+                                <td>${hour.time}</td>
+                            </tr>
+                        `;
+                    });
+
+                    tableHTML += `
+                            </tbody>
+                        </table>
+                    `;
+
+                    scheduleHoursDiv.innerHTML = tableHTML;
+                } else {
+                    alert(data.message || 'スケジュールの取得に失敗しました。');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading schedule:', error);
+                alert('スケジュールの読み込み中にエラーが発生しました。');
+            });
+        }
+
+        window.onload = function() {
+            // ページ読み込み時にスケジュールをロード
+            loadSelectedDate();
+        };
+    </script>
+    
+</body>
+</html>

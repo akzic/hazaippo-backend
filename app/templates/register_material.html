@@ -1,0 +1,370 @@
+<!-- app/templates/register_material.html -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>提供端材登録 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/register_material.css') }}">
+    <style>
+        /* モーダルの基本スタイル */
+        .modal {
+            display: none; /* 初期状態は非表示 */
+            position: fixed; 
+            z-index: 1050; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; /* スクロールを許可 */
+            outline: 0;
+            background-color: rgba(0,0,0,0.5); /* 背景を半透明に */
+        }
+        .modal-content {
+            position: relative;
+            margin: 5% auto; /* 上下のマージンを調整 */
+            padding: 20px;
+            width: 90%;
+            max-width: 800px; /* モーダルの最大幅を拡大 */
+            background: #fff;
+            border-radius: 5px;
+            max-height: 90vh; /* ビューポートの高さの90%まで */
+            overflow-y: auto; /* 縦方向のスクロールを許可 */
+        }
+        .close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        /* 一般エラーメッセージのスタイル */
+        #general-error {
+            display: none; /* 初期状態は非表示 */
+        }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="container mt-5">
+        <h1>提供端材登録</h1>
+        
+        <!-- 一般エラーメッセージ -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="general-error" class="alert alert-danger alert-dismissible fade show" role="alert">
+                    {% for category, message in messages %}
+                        {% if category == 'error' %}
+                            {{ message }}
+                        {% endif %}
+                    {% endfor %}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <!-- フラッシュメッセージ (成功、警告など) -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="flash-container">
+                    {% for category, message in messages %}
+                        {% if category != 'error' %}
+                            <div class="flash-message alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <!-- business_structure をデータ属性として設定 -->
+        <form id="registerMaterialForm" method="POST" action="{{ url_for('materials.register_material') }}" enctype="multipart/form-data" data-business-structure="{{ business_structure }}" data-dashboard-url="{{ url_for('dashboard.dashboard_home') }}">
+            {{ form.hidden_tag() }}
+            
+            <!-- 端材の種類 (必須) -->
+            <div class="form-group mb-3">
+                {{ form.material_type.label(class="form-label") }}
+                {{ form.material_type(class="form-control", id="material_type", required=true) }}
+                {% if form.material_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- wood_type フィールド (オプション) -->
+            <div class="form-group mb-3" id="wood_type_group" style="display: none;">
+                {{ form.wood_type.label(class="form-label") }}
+                {{ form.wood_type(class="form-control", id="wood_type") }}
+                {% if form.wood_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.wood_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- board_material_type フィールド (オプション) -->
+            <div class="form-group mb-3" id="board_material_type_group" style="display: none;">
+                {{ form.board_material_type.label(class="form-label") }}
+                {{ form.board_material_type(class="form-control", id="board_material_type") }}
+                {% if form.board_material_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.board_material_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- panel_type フィールド (オプション) -->
+            <div class="form-group mb-3" id="panel_type_group" style="display: none;">
+                {{ form.panel_type.label(class="form-label") }}
+                {{ form.panel_type(class="form-control", id="panel_type") }}
+                {% if form.panel_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.panel_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- サイズ (オプション) -->
+            <div class="form-group mb-3">
+                <label for="material_size_1" class="form-label">サイズ（mm）</label>
+                <div class="form-size-group d-flex align-items-center">
+                    {{ form.material_size_1(class="form-control me-2", id="material_size_1", placeholder="長さ") }}
+                    <span class="mx-2">×</span>
+                    {{ form.material_size_2(class="form-control me-2", id="material_size_2", placeholder="幅") }}
+                    <span class="mx-2">×</span>
+                    {{ form.material_size_3(class="form-control", id="material_size_3", placeholder="厚み") }}
+                </div>
+                {% if form.material_size_1.errors or form.material_size_2.errors or form.material_size_3.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_size_1.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                        {% for error in form.material_size_2.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                        {% for error in form.material_size_3.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- 都道府県 (オプション) -->
+            <div class="form-group mb-3">
+                <label for="m_prefecture" class="form-label">受け渡し場所</label>
+                {{ form.m_prefecture(class="form-control", id="m_prefecture", list="prefecture_options", required=false) }}
+                <datalist id="prefecture_options">
+                    <!-- 47都道府県のオプションをここに追加 -->
+                    <option value="北海道">
+                    <option value="青森県">
+                    <option value="岩手県">
+                    <option value="宮城県">
+                    <option value="秋田県">
+                    <option value="山形県">
+                    <option value="福島県">
+                    <option value="茨城県">
+                    <option value="栃木県">
+                    <option value="群馬県">
+                    <option value="埼玉県">
+                    <option value="千葉県">
+                    <option value="東京都">
+                    <option value="神奈川県">
+                    <option value="新潟県">
+                    <option value="富山県">
+                    <option value="石川県">
+                    <option value="福井県">
+                    <option value="山梨県">
+                    <option value="長野県">
+                    <option value="岐阜県">
+                    <option value="静岡県">
+                    <option value="愛知県">
+                    <option value="三重県">
+                    <option value="滋賀県">
+                    <option value="京都府">
+                    <option value="大阪府">
+                    <option value="兵庫県">
+                    <option value="奈良県">
+                    <option value="和歌山県">
+                    <option value="鳥取県">
+                    <option value="島根県">
+                    <option value="岡山県">
+                    <option value="広島県">
+                    <option value="山口県">
+                    <option value="徳島県">
+                    <option value="香川県">
+                    <option value="愛媛県">
+                    <option value="高知県">
+                    <option value="福岡県">
+                    <option value="佐賀県">
+                    <option value="長崎県">
+                    <option value="熊本県">
+                    <option value="大分県">
+                    <option value="宮崎県">
+                    <option value="鹿児島県">
+                    <option value="沖縄県">
+                </datalist>
+                {% if form.m_prefecture.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.m_prefecture.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- 市区町村 (オプション) -->
+            <div class="form-group mb-3">
+                <label for="m_city" class="form-label">市区町村</label>
+                {{ form.m_city(class="form-control", id="m_city", list="city_options", required=false) }}
+                <datalist id="city_options"></datalist>
+                {% if form.m_city.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.m_city.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- 住所 (オプション) -->
+            <div class="form-group mb-3">
+                <label for="m_address" class="form-label">市区町村以降の住所</label>
+                {{ form.m_address(class="form-control", id="m_address", list="address_options", placeholder="住所", required=false) }}
+                <datalist id="address_options"></datalist>
+                {% if form.m_address.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.m_address.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            <!-- End of new fields -->
+
+            <!-- 数量 (必須) -->
+            <div class="form-group mb-3">
+                {{ form.quantity.label(class="form-label") }}
+                {{ form.quantity(class="form-control", id="quantity", placeholder="数量", required=true) }}
+                {% if form.quantity.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.quantity.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- 締め切り日時 (必須) と土日を除く (オプション) -->
+            <div class="form-group mb-3 deadline-checkbox-group">
+                <div class="deadline-container mb-3">
+                    <label for="form_deadline" class="form-label">締め切り日時</label>
+                    {{ form.deadline(class="form-control", id="form_deadline", type="datetime-local", required=true) }}
+                    {% if form.deadline.errors %}
+                        <div class="alert alert-danger mt-2">
+                            {% for error in form.deadline.errors %}
+                                <p class="error-message mb-0">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="form-check">
+                    {{ form.exclude_weekends(class="form-check-input", id="exclude_weekends") }}
+                    <label for="exclude_weekends" class="form-check-label">土日を除く</label>
+                </div>
+            </div>
+
+            <!-- 画像アップロード (オプション) -->
+            <div class="form-group mb-3">
+                {{ form.image.label(class="form-label") }}
+                {{ form.image(class="form-control", id="image", accept="image/png, image/jpg, image/jpeg, image/gif, image/HEIC") }}
+                <img id="imagePreview" src="#" alt="Image Preview" style="display:none; max-width:100%; margin-top:10px;">
+                <button type="button" id="deleteImageButton" class="btn btn-danger mt-2" style="display:none;">画像を削除</button>
+                {% if form.image.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.image.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+                <!-- カメラ起動ボタンの追加 (オプション) -->
+                <button type="button" id="startCameraButton" class="btn btn-secondary mt-3">カメラを起動</button>
+            </div>
+
+            <!-- 備考 (オプション) -->
+            <div class="form-group mb-3">
+                {{ form.note.label(class="form-label") }}
+                {{ form.note(class="form-control", id="note", placeholder="備考", rows="3", required=false) }}
+                {% if form.note.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.note.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- 登録ボタン (必須) -->
+            <div class="form-group mb-3">
+                {{ form.submit(class="btn btn-primary", id="submitButton") }}
+            </div>
+
+            <!-- 戻るボタン -->
+            <div class="form-group mb-3">
+                <a href="{{ url_for('dashboard.dashboard_home') }}" class="btn back-button">戻る</a>
+            </div>
+        </form>
+        
+        <!-- カメラモーダル (オプション) -->
+        <div id="cameraModal" class="modal">
+            <div id="cameraContent" class="modal-content">
+                <span id="closeCamera" class="close">&times;</span>
+                <h3>カメラで画像をキャプチャ</h3>
+                <video id="cameraStream" autoplay></video>
+                <button type="button" id="captureImageBtn" class="btn btn-primary mt-3" disabled>画像をキャプチャ</button>
+                <canvas id="capturedCanvas" width="640" height="480" style="display:none;"></canvas>
+            </div>
+        </div>
+
+        <!-- 選択モーダル (オプション) -->
+        <div id="selectionModal" class="modal">
+            <div class="modal-content">
+                <span id="closeSelectionModal" class="close">&times;</span>
+                <div id="selectionContent">
+                    <!-- AI認識結果がここに挿入されます -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Modal (必須フィールドのみ成功時) -->
+        <div id="successModal" class="modal">
+            <div id="successContent" class="modal-content">
+                <span id="closeSuccessModal" class="close">&times;</span>
+                <p>端材が登録されました。</p>
+            </div>
+        </div>
+
+        <!-- デバッグ情報表示 (開発時のみ表示) -->
+        <div class="debug-info" style="display:none;">
+            <h3>デバッグ情報</h3>
+            <pre id="debugData"></pre>
+        </div>
+        
+        <!-- 外部JSファイルを読み込む -->
+        <script src="{{ url_for('static', filename='js/register_material.js') }}"></script>
+        <!-- Bootstrap JS Bundle (必要に応じて) -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    </div>
+</body>
+</html>

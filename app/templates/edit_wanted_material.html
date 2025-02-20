@@ -1,0 +1,190 @@
+<!-- app/templates/edit_wanted_material.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>希望端材編集 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/edit_material.css') }}">
+    <script src="{{ url_for('static', filename='js/edit_wanted_material.js') }}" defer></script>
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="content">
+        <h1>希望端材編集</h1>
+        <form method="POST" enctype="multipart/form-data" action="{{ url_for('materials.edit_wanted_material', material_id=wanted_material.id) }}">
+            {{ form.hidden_tag() }}
+            
+            <!-- 材料の種類 -->
+            <div class="form-group mb-3">
+                {{ form.material_type.label(class="form-label") }}
+                {{ form.material_type(class="form-control", id="wanted_material_type") }}
+                {% if form.material_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- wood_type フィールド -->
+            <div class="form-group mb-3" id="wood_type_group_wanted" style="display: none;">
+                {{ form.wood_type.label(class="form-label") }}
+                {{ form.wood_type(class="form-control", id="wood_type_wanted") }}
+                {% if form.wood_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.wood_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div}
+
+            <!-- board_material_type フィールド -->
+            <div class="form-group mb-3" id="board_material_type_group_wanted" style="display: none;">
+                {{ form.board_material_type.label(class="form-label") }}
+                {{ form.board_material_type(class="form-control", id="board_material_type_wanted") }}
+                {% if form.board_material_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.board_material_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div}
+
+            <!-- panel_type フィールド -->
+            <div class="form-group mb-3" id="panel_type_group_wanted" style="display: none;">
+                {{ form.panel_type.label(class="form-label") }}
+                {{ form.panel_type(class="form-control", id="panel_type_wanted") }}
+                {% if form.panel_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.panel_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div}
+    
+            <!-- サイズ1 -->
+            <div class="form-group mb-3">
+                {{ form.material_size_1.label(class="form-label") }}
+                {{ form.material_size_1(class="form-control", id="material_size_1") }}
+                {% if form.material_size_1.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_size_1.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div }
+    
+            <!-- サイズ2 -->
+            <div class="form-group mb-3">
+                {{ form.material_size_2.label(class="form-label") }}
+                {{ form.material_size_2(class="form-control", id="material_size_2") }}
+                {% if form.material_size_2.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_size_2.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div }
+    
+            <!-- サイズ3 -->
+            <div class="form-group mb-3">
+                {{ form.material_size_3.label(class="form-label") }}
+                {{ form.material_size_3(class="form-control", id="material_size_3", placeholder="") }}
+                {% if form.material_size_3.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_size_3.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div }
+    
+            <!-- 受け渡し場所（個人の場合） -->
+            {% if current_user.business_structure != 0 %}
+                <div class="form-group mb-3">
+                    {{ form.location.label(class="form-label") }}
+                    {{ form.location(class="form-control", id="location") }}
+                    {% if form.location.errors %}
+                        <div class="alert alert-danger mt-2">
+                            {% for error in form.location.errors %}
+                                <p class="error-message mb-0">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+    
+            <!-- 数量 -->
+            <div class="form-group mb-3">
+                {{ form.quantity.label(class="form-label") }}
+                {{ form.quantity(class="form-control", id="quantity") }}
+                {% if form.quantity.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.quantity.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div }
+    
+            <!-- 締め切り日時と土日除外 -->
+            <div class="form-group mb-3 deadline-checkbox-group">
+                <div class="deadline-container">
+                    {{ form.deadline.label(class="form-label") }}
+                    {{ form.deadline(class="form-control deadline-input", id="deadline", type="datetime-local") }}
+                    {% if form.deadline.errors %}
+                        <div class="alert alert-danger mt-2">
+                            {% for error in form.deadline.errors %}
+                                <p class="error-message mb-0">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div }
+                <div class="checkbox-container">
+                    {{ form.exclude_weekends(class="form-check-input", id="exclude_weekends") }}
+                    <label for="exclude_weekends" class="form-check-label">土日を除く</label>
+                </div }
+            </div }
+    
+            <!-- 備考 -->
+            <div class="form-group mb-3">
+                {{ form.note.label(class="form-label") }}
+                {{ form.note(class="form-control", id="note") }}
+                {% if form.note.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.note.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div }
+    
+            <!-- 保存ボタン -->
+            <div class="form-group mb-3">
+                {{ form.submit(class="btn btn-primary") }}
+            </div }
+    
+            <!-- 戻るボタン -->
+            <div class="button-group">
+                <a href="{{ url_for('dashboard.dashboard_home') }}" class="btn btn-secondary">戻る</a>
+            </div }
+        </form>
+        
+        <!-- デバッグ情報表示 -->
+        <div class="debug-info">
+            <h3>デバッグ情報</h3>
+            <pre id="debugData"></pre>
+        </div }
+        
+        <!-- 外部JSファイルを読み込む -->
+        <script src="{{ url_for('static', filename='js/edit_wanted_material.js') }}"></script }
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    </div }
+</body>
+</html>

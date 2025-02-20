@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>欲しい端材登録 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/register_material.css') }}">
+    <!-- jQueryの読み込み（必須） -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- 外部JavaScriptファイルの読み込み（1回のみ） -->
+    <script src="{{ url_for('static', filename='js/register_wanted.js') }}" defer></script>
+    <style>
+        /* モーダルの基本スタイル */
+        .modal {
+            display: none; /* 初期状態は非表示 */
+            position: fixed; 
+            z-index: 1050; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            outline: 0;
+            background-color: rgba(0,0,0,0.5); /* 背景を半透明に */
+        }
+        .modal-content {
+            position: relative;
+            margin: 10% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #aaa;
+        }
+        .close:hover {
+            color: #000;
+        }
+        .modal-header {
+            margin-bottom: 15px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+        .modal-body {
+            margin-bottom: 15px;
+        }
+        .modal-footer {
+            text-align: right;
+        }
+        .modal-footer button {
+            padding: 8px 16px;
+            background-color: #333;
+            border: none;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .modal-footer button:hover {
+            background-color: #333;
+        }
+
+        /* Success Modal Styles */
+        #successModal {
+            display: none; /* 初期は非表示 */
+            position: fixed;
+            z-index: 1050;
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            outline: 0;
+            background-color: rgba(0,0,0,0.5); /* 背景を半透明に */
+        }
+
+        #successContent {
+            position: relative;
+            margin: 10% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        #closeSuccessModal {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #aaa;
+        }
+
+        #closeSuccessModal:hover {
+            color: #000;
+        }
+
+        #successContent h2 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        #successContent p {
+            margin: 15px 0;
+        }
+
+        #successContent .modal-footer button {
+            padding: 8px 16px;
+            background-color: #4db995; /* 成功ボタンの色 */
+            border: none;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #successContent .modal-footer button:hover {
+            background-color: #218838;
+        }
+
+        /* その他のスタイル（register_material.cssから継承） */
+        /* ...（既存のregister_material.cssのスタイルはそのまま適用されます）... */
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="container mt-5">
+        <h1>欲しい端材登録</h1>
+        
+        <!-- 一般エラーメッセージ -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="general-error" class="general-error">
+                    {% for category, message in messages %}
+                        {% if category == 'danger' %}
+                            <p>{{ message }}</p>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <!-- フラッシュメッセージ (成功、警告など) -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="flash-container">
+                    {% for category, message in messages %}
+                        {% if category != 'danger' %}
+                            <div class="flash-message alert alert-{{ category }} {{ 'd-none' if category != 'success' else '' }}">
+                                {{ message }}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <!-- business_structure をデータ属性として設定 -->
+        <form id="registerWantedForm" method="POST" action="{{ url_for('materials.register_wanted') }}">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-group mb-3">
+                {{ form.material_type.label(class="form-label") }}
+                {{ form.material_type(class="form-control", id="material_type") }}
+                {% if form.material_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- wood_type フィールド -->
+            <div class="form-group mb-3" id="wood_type_group_wanted" style="display: none;">
+                {{ form.wood_type.label(class="form-label") }}
+                {{ form.wood_type(class="form-control", id="wood_type_wanted") }}
+                {% if form.wood_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.wood_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- board_material_type フィールド -->
+            <div class="form-group mb-3" id="board_material_type_group_wanted" style="display: none;">
+                {{ form.board_material_type.label(class="form-label") }}
+                {{ form.board_material_type(class="form-control", id="board_material_type_wanted") }}
+                {% if form.board_material_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.board_material_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- panel_type フィールド -->
+            <div class="form-group mb-3" id="panel_type_group_wanted" style="display: none;">
+                {{ form.panel_type.label(class="form-label") }}
+                {{ form.panel_type(class="form-control", id="panel_type_wanted") }}
+                {% if form.panel_type.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.panel_type.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group mb-3">
+                <label for="material_size_1" class="form-label">サイズ（mm）</label>
+                <div class="form-size-group d-flex align-items-center">
+                    {{ form.material_size_1(class="form-control me-2", id="material_size_1", min="0.1") }}
+                    <span class="mx-2">×</span>
+                    {{ form.material_size_2(class="form-control me-2", id="material_size_2", min="0.1") }}
+                    <span class="mx-2">×</span>
+                    {{ form.material_size_3(class="form-control", id="material_size_3", placeholder="") }}
+                </div>
+                {% if form.material_size_1.errors or form.material_size_2.errors or form.material_size_3.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.material_size_1.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                        {% for error in form.material_size_2.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                        {% for error in form.material_size_3.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+    
+            <!-- 受け渡し場所 -->
+            {# 
+            {% if current_user.business_structure != 0 %}
+                <div class="form-group mb-3">
+                    {{ form.handover_location.label(class="form-label") }}
+                    {{ form.handover_location(class="form-control", id="handover_location") }}
+                    {% if form.handover_location.errors %}
+                        <div class="alert alert-danger mt-2">
+                            {% for error in form.handover_location.errors %}
+                                <p class="error-message mb-0">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+            #}
+            <!-- 上記のhandover_locationフィールドを削除またはコメントアウト -->
+
+            <div class="form-group mb-3">
+                {{ form.quantity.label(class="form-label") }}
+                {{ form.quantity(class="form-control", id="quantity", min="1", max="100") }}
+                {% if form.quantity.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.quantity.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+    
+            <div class="form-group mb-3 deadline-checkbox-group">
+                <div class="deadline-container">
+                    <label for="deadline" class="form-label">締め切り日時</label>
+                    {{ form.deadline(class="form-control deadline-input", id="deadline", type="datetime-local") }}
+                    {% if form.deadline.errors %}
+                        <div class="alert alert-danger mt-2">
+                            {% for error in form.deadline.errors %}
+                                <p class="error-message mb-0">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="checkbox-container">
+                    {{ form.exclude_weekends(class="form-check-input", id="exclude_weekends") }}
+                    <label for="exclude_weekends" class="form-check-label">土日を除く</label>
+                </div>
+            </div>
+    
+            <!-- 備考 -->
+            <div class="form-group mb-3">
+                {{ form.note.label(class="form-label") }}
+                {{ form.note(class="form-control", id="note") }}
+                {% if form.note.errors %}
+                    <div class="alert alert-danger mt-2">
+                        {% for error in form.note.errors %}
+                            <p class="error-message mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+    
+            <!-- 登録ボタン -->
+            <div class="form-group mb-3">
+                {{ form.submit(class="btn btn-primary", value="登録", id="submitButton") }}
+                <a href="{{ url_for('materials.bulk_register_wanted') }}" class="btn btn-primary" style="margin-left: 10px; line-height: 40px;">一括登録</a>
+            </div>
+
+
+    
+            <!-- 戻るボタン -->
+            <div class="button-group">
+                <a href="{{ url_for('dashboard.dashboard_home') }}" class="btn btn-secondary">戻る</a>
+            </div>
+        </form>
+        
+        <!-- デバッグ情報表示（必要に応じて） -->
+        <div class="debug-info">
+            <h3>デバッグ情報</h3>
+            <pre id="debugData"></pre>
+        </div>
+        
+        <!-- モーダルの追加 -->
+        
+        <!-- カメラモーダル（オプション） -->
+        <div id="cameraModal" class="modal">
+            <div id="cameraContent" class="modal-content">
+                <span id="closeCamera" class="close">&times;</span>
+                <h2>カメラで画像をキャプチャ</h2>
+                <video id="cameraStream" autoplay></video>
+                <button type="button" id="captureImageBtn" class="btn btn-primary mt-3" disabled>画像をキャプチャ</button>
+                <canvas id="capturedCanvas" width="640" height="480" style="display:none;"></canvas>
+            </div>
+        </div>
+
+        <!-- 選択モーダル（オプション） -->
+        <div id="selectionModal" class="modal">
+            <div class="modal-content">
+                <span id="closeSelectionModal" class="close">&times;</span>
+                <div id="selectionContent">
+                    <!-- AI認識結果がここに挿入されます -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Modal -->
+        <div id="successModal" class="modal">
+            <div id="successContent" class="modal-content">
+                <span id="closeSuccessModal" class="close">&times;</span>
+                <div class="modal-header">
+                    <h2>登録完了</h2>
+                </div>
+                <div class="modal-body">
+                    希望材料が正常に登録されました。
+                </div>
+                <div class="modal-footer">
+                    <button type="button">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

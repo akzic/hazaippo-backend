@@ -1,0 +1,113 @@
+<!-- templates/register_site.html -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>現場登録</title>
+    <!-- カスタムCSSをリンク -->
+    <link href="{{ url_for('static', filename='css/register_site.css') }}" rel="stylesheet">
+    <!-- CSRFトークン -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="container">
+        <h1>現場登録</h1>
+        <form id="siteRegisterForm">
+            <!-- CSRFトークンをフォーム内に追加する部分を削除 -->
+            <div class="mb-3">
+                <label for="site_prefecture" class="form-label">現場県</label>
+                <select class="form-control" id="site_prefecture" name="site_prefecture" required>
+                    <option value="">選択してください</option>
+                    <option value="北海道" {% if user_prefecture == '北海道' %}selected{% endif %}>北海道</option>
+                    <option value="青森県" {% if user_prefecture == '青森県' %}selected{% endif %}>青森県</option>
+                    <option value="岩手県" {% if user_prefecture == '岩手県' %}selected{% endif %}>岩手県</option>
+                    <option value="宮城県" {% if user_prefecture == '宮城県' %}selected{% endif %}>宮城県</option>
+                    <option value="秋田県" {% if user_prefecture == '秋田県' %}selected{% endif %}>秋田県</option>
+                    <option value="山形県" {% if user_prefecture == '山形県' %}selected{% endif %}>山形県</option>
+                    <option value="福島県" {% if user_prefecture == '福島県' %}selected{% endif %}>福島県</option>
+                    <option value="茨城県" {% if user_prefecture == '茨城県' %}selected{% endif %}>茨城県</option>
+                    <option value="栃木県" {% if user_prefecture == '栃木県' %}selected{% endif %}>栃木県</option>
+                    <option value="群馬県" {% if user_prefecture == '群馬県' %}selected{% endif %}>群馬県</option>
+                    <option value="埼玉県" {% if user_prefecture == '埼玉県' %}selected{% endif %}>埼玉県</option>
+                    <option value="千葉県" {% if user_prefecture == '千葉県' %}selected{% endif %}>千葉県</option>
+                    <option value="東京都" {% if user_prefecture == '東京都' %}selected{% endif %}>東京都</option>
+                    <option value="神奈川県" {% if user_prefecture == '神奈川県' %}selected{% endif %}>神奈川県</option>
+                    <option value="新潟県" {% if user_prefecture == '新潟県' %}selected{% endif %}>新潟県</option>
+                    <option value="富山県" {% if user_prefecture == '富山県' %}selected{% endif %}>富山県</option>
+                    <option value="石川県" {% if user_prefecture == '石川県' %}selected{% endif %}>石川県</option>
+                    <option value="福井県" {% if user_prefecture == '福井県' %}selected{% endif %}>福井県</option>
+                    <option value="山梨県" {% if user_prefecture == '山梨県' %}selected{% endif %}>山梨県</option>
+                    <option value="長野県" {% if user_prefecture == '長野県' %}selected{% endif %}>長野県</option>
+                    <option value="岐阜県" {% if user_prefecture == '岐阜県' %}selected{% endif %}>岐阜県</option>
+                    <option value="静岡県" {% if user_prefecture == '静岡県' %}selected{% endif %}>静岡県</option>
+                    <option value="愛知県" {% if user_prefecture == '愛知県' %}selected{% endif %}>愛知県</option>
+                    <option value="三重県" {% if user_prefecture == '三重県' %}selected{% endif %}>三重県</option>
+                    <option value="滋賀県" {% if user_prefecture == '滋賀県' %}selected{% endif %}>滋賀県</option>
+                    <option value="京都府" {% if user_prefecture == '京都府' %}selected{% endif %}>京都府</option>
+                    <option value="大阪府" {% if user_prefecture == '大阪府' %}selected{% endif %}>大阪府</option>
+                    <option value="兵庫県" {% if user_prefecture == '兵庫県' %}selected{% endif %}>兵庫県</option>
+                    <option value="奈良県" {% if user_prefecture == '奈良県' %}selected{% endif %}>奈良県</option>
+                    <option value="和歌山県" {% if user_prefecture == '和歌山県' %}selected{% endif %}>和歌山県</option>
+                    <option value="鳥取県" {% if user_prefecture == '鳥取県' %}selected{% endif %}>鳥取県</option>
+                    <option value="島根県" {% if user_prefecture == '島根県' %}selected{% endif %}>島根県</option>
+                    <option value="岡山県" {% if user_prefecture == '岡山県' %}selected{% endif %}>岡山県</option>
+                    <option value="広島県" {% if user_prefecture == '広島県' %}selected{% endif %}>広島県</option>
+                    <option value="山口県" {% if user_prefecture == '山口県' %}selected{% endif %}>山口県</option>
+                    <option value="徳島県" {% if user_prefecture == '徳島県' %}selected{% endif %}>徳島県</option>
+                    <option value="香川県" {% if user_prefecture == '香川県' %}selected{% endif %}>香川県</option>
+                    <option value="愛媛県" {% if user_prefecture == '愛媛県' %}selected{% endif %}>愛媛県</option>
+                    <option value="高知県" {% if user_prefecture == '高知県' %}selected{% endif %}>高知県</option>
+                    <option value="福岡県" {% if user_prefecture == '福岡県' %}selected{% endif %}>福岡県</option>
+                    <option value="佐賀県" {% if user_prefecture == '佐賀県' %}selected{% endif %}>佐賀県</option>
+                    <option value="長崎県" {% if user_prefecture == '長崎県' %}selected{% endif %}>長崎県</option>
+                    <option value="熊本県" {% if user_prefecture == '熊本県' %}selected{% endif %}>熊本県</option>
+                    <option value="大分県" {% if user_prefecture == '大分県' %}selected{% endif %}>大分県</option>
+                    <option value="宮崎県" {% if user_prefecture == '宮崎県' %}selected{% endif %}>宮崎県</option>
+                    <option value="鹿児島県" {% if user_prefecture == '鹿児島県' %}selected{% endif %}>鹿児島県</option>
+                    <option value="沖縄県" {% if user_prefecture == '沖縄県' %}selected{% endif %}>沖縄県</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="site_city" class="form-label">市</label>
+                <input type="text" class="form-control" id="site_city" name="site_city" required>
+            </div>
+            <div class="mb-3">
+                <label for="site_address" class="form-label">それ以降の住所</label>
+                <input type="text" class="form-control" id="site_address" name="site_address" required>
+                <div id="addressError" class="form-text text-danger d-none">この住所は既に登録されています。</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">現場関係者を選択（任意）</label> <!-- 「（任意）」を追加 -->
+                <div id="participants">
+                    {% for user in users %}
+                        <!-- 現ユーザーを除外 -->
+                        {% if user.id != current_user.id %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="{{ user.id }}" id="participant{{ user.id }}" name="participants">
+                                <label class="form-check-label" for="participant{{ user.id }}">
+                                    {{ user.contact_name }} ({{ user.email }})
+                                </label>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="button-group">
+                <button type="submit" class="btn-primary" id="submitBtn" disabled>登録</button>
+                <a href="{{ url_for('dashboard.dashboard_home') }}" class="btn-secondary back-button">戻る</a>
+            </div>
+        </form>
+        <div id="alertPlaceholder" class="mt-3"></div>
+
+        <!-- 登録成功メッセージ -->
+        <div id="successMessage">
+            現場が登録されました。
+        </div>
+    </div>
+
+    <!-- カスタムJS -->
+    <script src="{{ url_for('static', filename='js/register_site.js') }}"></script>
+</body>
+</html>

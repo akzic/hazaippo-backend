@@ -1,0 +1,111 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #4db995; /* 見出しの色 */
+}
+
+h2 {
+    font-size: 20px;
+    margin-bottom: 15px;
+    color: #333; /* h2を黒文字に変更 */
+}
+
+.card {
+    background-color: #fff;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.category-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    list-style-type: none;
+    padding: 0;
+}
+
+.category-list li {
+    flex: 1 1 auto;
+    margin-bottom: 10px;
+}
+
+.category-list li button {
+    padding: 10px;
+    background-color: #d66a35; /* カテゴリボタンの色 */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    width: auto; /* ボタンの大きさを文字数に合わせる */
+    white-space: nowrap;
+}
+
+.category-list li button:hover {
+    background-color: #b45628; /* カテゴリボタンのホバー時の色 */
+}
+
+.video-display {
+    background-color: #fff;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+#video-description {
+    margin-top: 15px;
+    font-size: 16px;
+    color: #333;
+}
+
+.button-group {
+    text-align: center;
+}
+
+.button-group .btn-secondary {
+    background-color: #6c757d; /* 戻るボタンの色 */
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.button-group .btn-secondary:hover {
+    background-color: #5a6268; /* 戻るボタンホバー時の色 */
+}
+
+@media (max-width: 600px) {
+    h1, h2 {
+        font-size: 18px;
+    }
+
+    .category-list li button {
+        padding: 8px;
+    }
+
+    .video-display {
+        padding: 15px;
+    }
+}

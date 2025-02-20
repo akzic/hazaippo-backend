@@ -1,0 +1,204 @@
+/* リセット */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* 全体のスタイル */
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+.container {
+    width: 90%;
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+    font-size: 28px;
+    margin-bottom: 30px;
+    text-align: center;
+    color: #4db995;
+}
+
+.card {
+    padding: 20px;
+}
+
+#imagePreview {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.no-image {
+    text-align: center;
+    font-size: 16px;
+    color: #777;
+    margin-bottom: 20px;
+}
+
+.material-info p {
+    font-size: 16px;
+    margin: 10px 0;
+}
+
+.material-info strong {
+    color: #4db995;
+}
+
+.button-group {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.btn {
+    flex: 1;
+    padding: 12px 0;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.3s;
+    margin: 0 5px;
+    text-decoration: none;
+    color: #fff;
+}
+
+.primary-btn {
+    background-color: #4db995;
+}
+
+.primary-btn:hover {
+    background-color: #3a9478;
+}
+
+.secondary-btn {
+    background-color: #6c757d;
+}
+
+.secondary-btn:hover {
+    background-color: #5a6268;
+}
+
+.error-messages {
+    margin-top: 20px;
+    background-color: #f8d7da;
+    color: #842029;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+.error-messages ul {
+    list-style-type: disc;
+    padding-left: 20px;
+}
+
+.flash-messages {
+    margin-top: 30px;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 5px;
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.alert.success {
+    background-color: #d1e7dd;
+    color: #0f5132;
+}
+
+.alert.error {
+    background-color: #f8d7da;
+    color: #842029;
+}
+
+.close-btn {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    cursor: pointer;
+    font-size: 20px;
+}
+
+/* モーダルスタイル */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: #fff;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    padding: 15px;
+    background-color: #4db995;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.close-modal {
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 20px;
+    font-size: 16px;
+    color: #333;
+}
+
+.modal-footer {
+    padding: 15px;
+    display: flex;
+    justify-content: flex-end;
+    background-color: #f1f1f1;
+}
+
+.modal-footer .btn {
+    margin-left: 10px;
+}
+
+@media (max-width: 600px) {
+    .button-group {
+        flex-direction: column;
+    }
+
+    .btn {
+        margin: 5px 0;
+    }
+}

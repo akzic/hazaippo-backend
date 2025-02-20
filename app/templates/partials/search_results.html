@@ -1,0 +1,43 @@
+<!-- app/templates/partials/search_results.html -->
+{% if results %}
+    <ul class="search-results-list">
+        {% for result in results %}
+            <li class="search-result-item">
+                <div class="result-info">
+                    <p><strong>端材の種類:</strong> {{ result.type }}</p>
+                    
+                    {% if result.type == '木材' and result.wood_type %}
+                        <p><strong>木材の種類:</strong> {{ result.wood_type }}</p>
+                    {% elif result.type == 'ボード材' and result.board_material_type %}
+                        <p><strong>ボード材の種類:</strong> {{ result.board_material_type }}</p>
+                    {% elif result.type == 'パネル材' and result.panel_type %}
+                        <p><strong>パネル材の種類:</strong> {{ result.panel_type }}</p>
+                    {% endif %}
+                    
+                    <p><strong>サイズ:</strong>
+                        {% if result.size_1 == 0.0 and result.size_2 == 0.0 and result.size_3 == 0.0 %}
+                            指定なし
+                        {% else %}
+                            {{ result.size_1 }} mm × {{ result.size_2 }} mm × {{ result.size_3 }} mm
+                        {% endif %}
+                    </p>
+                    
+                    <p><strong>数量:</strong> {{ result.quantity }}</p>
+                    
+                    <p><strong>受け取り住所:</strong> {{ result.m_prefecture }} {{ result.m_city }} {{ result.m_address }}</p>
+                    
+                    <p><strong>締切日:</strong> {{ result.deadline.strftime('%Y-%m-%d %H:%M') }}</p>
+                </div>
+                
+                <div class="result-actions">
+                    <a href="{{ url_for('materials.detail', material_id=result.id) }}" class="btn btn-primary">詳細</a>
+                    <button onclick="showOnMap('{{ result.m_prefecture }} {{ result.m_city }} {{ result.m_address }}', 'map-{{ result.id }}')" class="btn btn-secondary show-map-btn">受け取り住所表示</button>
+                </div>
+                
+                <div id="map-{{ result.id }}" class="material-map" style="display: none; height: 300px; margin-top: 10px;"></div>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <!-- 「検索結果がありません。」の表示はモーダルに移動したため、ここでは何も表示しません -->
+{% endif %}

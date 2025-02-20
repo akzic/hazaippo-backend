@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>動画閲覧 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/video_viewing.css') }}">
+    <script>
+        function showVideo(videoId, description) {
+            document.getElementById("video-frame").src = "https://www.youtube.com/embed/" + videoId;
+            document.getElementById("video-description").innerText = description;
+        }
+    </script>
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="container">
+        <h1>端材利用に関する動画閲覧</h1>
+
+        <!-- カテゴリ選択 -->
+        <div class="card">
+            <h2>カテゴリを選択</h2>
+            <ul class="category-list">
+                <li><button onclick="showVideo('your_video_id_1', '動画1の説明: ここに動画1の詳細説明を表示します。')">カテゴリ1</button></li>
+                <li><button onclick="showVideo('your_video_id_2', '動画2の説明: ここに動画2の詳細説明を表示します。')">カテゴリ2</button></li>
+                <li><button onclick="showVideo('your_video_id_3', '動画3の説明: ここに動画3の詳細説明を表示します。')">カテゴリ3</button></li>
+                <li><button onclick="showVideo('your_video_id_4', '動画4の説明: ここに動画4の詳細説明を表示します。')">カテゴリ4</button></li>
+                <li><button onclick="showVideo('your_video_id_5', '動画5の説明: ここに動画5の詳細説明を表示します。')">カテゴリ5</button></li>
+            </ul>
+        </div>
+
+        <!-- 動画表示エリア -->
+        <div class="video-display">
+            <h2>動画詳細</h2>
+            <iframe id="video-frame" width="100%" height="315" src="" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            <p id="video-description">動画の説明がここに表示されます。</p>
+        </div>
+
+        <div class="button-group">
+            <a href="{{ url_for('dashboard.dashboard_home') }}" class="btn btn-secondary">戻る</a>
+        </div>
+    </div>
+</body>
+</html>

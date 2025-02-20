@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ログイン - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/login.css') }}">
+    <style>
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .header img {
+            height: 4em; /* h1のフォントサイズに合わせる */
+            margin-left: 10px;
+        }
+        .card {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>はざいっぽ ログイン</h1>
+            <img src="{{ url_for('static', filename='images/イリヨウロゴパターン002.jpg') }}" alt="はざいっぽ ロゴ">
+        </div>
+        <form id="loginForm" method="POST" action="{{ url_for('auth.login') }}">
+            {{ form.hidden_tag() }}
+            <div>
+                <label for="email">メールアドレス</label>
+                <input type="email" name="email" id="email" required autocomplete="email">
+            </div>
+            <div>
+                <label for="password">パスワード</label>
+                <input type="password" name="password" id="password" required autocomplete="current-password">
+            </div>
+            <div style="display: flex; align-items: center;">
+                <input type="checkbox" name="remember" id="remember" style="margin-right: 5px;">
+                <label for="remember" style="margin: 0;">ログイン状態を保持する</label>
+            </div>
+            <div>
+                <button type="submit">ログイン</button>
+            </div>
+            <div style="text-align: center;">
+                <a href="{{ url_for('auth.register') }}">新規ユーザー登録</a> / <a href="{{ url_for('auth.reset_request') }}">パスワードを忘れた方へ</a>
+            </div>
+        </form>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div id="flash-messages">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+</body>
+</html>

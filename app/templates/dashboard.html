@@ -1,0 +1,365 @@
+<!-- templates/dashboard.html -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ダッシュボード - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    {% include 'header.html' %}
+
+    <div class="flash-messages">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="content container mt-4">
+        <h1>ダッシュボード</h1>
+
+        <section class="terminal-section mb-5"></section>
+            <h2>ターミナルを利用する</h2>
+            <div class="button-group mb-3">
+                <a href="{{ url_for('terminal.search_terminal') }}" class="btn btn-primary me-2">ターミナル検索</a>
+                <a href="{{ url_for('terminal.reservation_confirm', reservation_id=1) }}" class="btn btn-primary me-2">予約確認</a>
+                <a href="{{ url_for('terminal.video_viewing') }}" class="btn btn-primary me-2">動画閲覧</a>
+            </div>
+        </section>
+
+        <!-- 端材を提供したい セクション -->
+        <section class="provide-section mb-5">
+            <h2>端材を提供したい</h2>
+            <div class="button-group mb-3">
+                <a href="{{ url_for('materials.register_material') }}" class="btn btn-primary me-2">提供する端材登録</a>
+                <a href="{{ url_for('site.register') }}" class="btn btn-primary me-2">現場登録</a>
+                <a href="{{ url_for('search.search_wanted_materials') }}" class="btn btn-primary me-2">材料を必要としている人を検索</a>
+                <a href="{{ url_for('materials.material_list') }}" class="btn btn-primary me-2">提供端材一覧</a>
+            </div>
+
+            {% if matched_materials %}
+                <div class="matched-history mb-4">
+                    <h3>マッチ履歴（未完了・提供端材）</h3>
+                    <ul class="list-group">
+                        {% for material in matched_materials %}
+                            <li class="list-group-item">
+                                {% if material.image and material.image != 'default.jpg' %}
+                                    <img src="{{ url_for('static', filename='images/' ~ material.image) }}" alt="端材の画像" id="imagePreview">
+                                {% else %}
+                                    <p>登録された画像はありません</p>
+                                {% endif %}
+                                <p>種類: {{ material.type }}</p>
+                                {% if material.type == "木材" and material.wood_type %}
+                                    <p>木材の種類: {{ material.wood_type }}</p>
+                                {% elif material.type == "ボード材" and material.board_material_type %}
+                                    <p>ボード材の種類: {{ material.board_material_type }}</p>
+                                {% elif material.type == "パネル材" and material.panel_type %}
+                                    <p>パネル材の種類: {{ material.panel_type }}</p>
+                                {% endif %}
+                                <p>サイズ：{{ material.size_1 }}×{{ material.size_2 }}×{{ material.size_3 }}</p>
+                                <p>受け渡し場所: {{ material.m_prefecture }} {{ material.m_city }} {{ material.m_address }}</p>
+                                <p>数量: {{ material.quantity }}</p>
+                                <p>締切日: {{ material.deadline.strftime('%Y-%m-%d') if material.deadline else '未設定' }}</p>
+                                <p>土日受け渡し: 
+                                    {% if material.exclude_weekends %}
+                                        不可
+                                    {% else %}
+                                        可能
+                                    {% endif %}
+                                </p>
+                                <p>備考: {{ material.note or 'なし' }}</p>
+                                <p>マッチ日時: {{ material.matched_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                                
+                                {% if material.requests %}
+                                    {% for req in material.requests %}
+                                        {% if req.requester_user %}
+                                            <p>リクエスト送信者: {{ req.requester_user.company_name }} ({{ req.requester_user.prefecture }} {{ req.requester_user.city }} {{ req.requester_user.address }})</p>
+                                            <p>業種: {{ req.requester_user.industry }}</p>
+                                            <p>職種: {{ req.requester_user.job_title }}</p>
+                                        {% else %}
+                                            <p>リクエスト送信者の情報はありません。</p>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <p>リクエストはありません。</p>
+                                {% endif %}
+                                
+                                {% if material.owner.id == current_user.id or current_user.id in same_location_user_ids %}
+                                    <form method="POST" action="{{ url_for('requests_bp.complete_match_material', material_id=material.id) }}">
+                                        {{ complete_match_form.hidden_tag() }}
+                                        {{ complete_match_form.submit(class="btn btn-primary") }}
+                                    </form>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            {% if received_requests_materials %}
+                <div class="received-requests mb-4">
+                    <h3>届いたリクエスト（提供端材）</h3>
+                    <ul class="list-group">
+                        {% for req in received_requests_materials %}
+                            <li class="list-group-item">
+                                {% if req.material.image and req.material.image != 'default.jpg' %}
+                                    <img src="{{ url_for('static', filename='images/' ~ req.material.image) }}" alt="端材の画像" id="imagePreview">
+                                {% else %}
+                                    <p>登録された画像はありません</p>
+                                {% endif %}
+                                <p>種類: {{ req.material.type }}</p>
+                                {% if req.material.type == "木材" and req.material.wood_type %}
+                                    <p>木材の種類: {{ req.material.wood_type }}</p>
+                                {% elif req.material.type == "ボード材" and req.material.board_material_type %}
+                                    <p>ボード材の種類: {{ req.material.board_material_type }}</p>
+                                {% elif req.material.type == "パネル材" and req.material.panel_type %}
+                                    <p>パネル材の種類: {{ req.material.panel_type }}</p>
+                                {% endif %}
+                                <p>サイズ：{{ req.material.size_1 }}×{{ req.material.size_2 }}×{{ req.material.size_3 }}</p>
+                                <p>受け渡し場所: {{ req.material.m_prefecture }} {{ req.material.m_city }} {{ req.material.m_address }}</p>
+                                <p>数量: {{ req.material.quantity }}</p>
+                                <p>締切日: {{ req.material.deadline.strftime('%Y-%m-%d') if req.material.deadline else '未設定' }}</p>
+                                <p>土日受け渡し: 
+                                    {% if req.material.exclude_weekends %}
+                                        不可
+                                    {% else %}
+                                        可能
+                                    {% endif %}
+                                </p>
+                                <p>備考: {{ req.material.note or 'なし' }}</p>
+                                
+                                <p>業種: {{ req.requester_user.industry }}</p>
+                                <p>職種: {{ req.requester_user.job_title }}</p>
+                                
+                                <form method="POST" action="{{ url_for('requests_bp.accept_request_material', request_id=req.id) }}">
+                                    {{ accept_request_material_form.hidden_tag() }}
+                                    {{ accept_request_material_form.submit(class="btn btn-primary") }}
+                                </form>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+
+            {% if sent_requests_wanted %}
+                <div class="sent-requests mb-4">
+                    <h3>送信リクエスト（欲しい端材）</h3>
+                    <ul class="list-group">
+                        {% for req in sent_requests_wanted %}
+                            <li class="list-group-item">
+                                <p>提供ユーザー: {{ req.wanted_material.owner.company_name }} ({{ req.wanted_material.owner.prefecture }} {{ req.wanted_material.owner.city }} {{ req.wanted_material.owner.address }})</p>
+                                {% if req.wanted_material.image and req.wanted_material.image != 'default.jpg' %}
+                                    <img src="{{ url_for('static', filename='images/' ~ req.wanted_material.image) }}" alt="端材の画像" id="imagePreview">
+                                {% else %}
+                                    <p>登録された画像はありません</p>
+                                {% endif %}
+                                <p>種類: {{ req.wanted_material.type }}</p>
+                                {% if req.wanted_material.type == "木材" and req.wanted_material.wood_type %}
+                                    <p>木材の種類: {{ req.wanted_material.wood_type }}</p>
+                                {% elif req.wanted_material.type == "ボード材" and req.wanted_material.board_material_type %}
+                                    <p>ボード材の種類: {{ req.wanted_material.board_material_type }}</p>
+                                {% elif req.wanted_material.type == "パネル材" and req.wanted_material.panel_type %}
+                                    <p>パネル材の種類: {{ req.wanted_material.panel_type }}</p>
+                                {% endif %}
+                                <p>サイズ：{{ req.wanted_material.size_1 }}×{{ req.wanted_material.size_2 }}×{{ req.wanted_material.size_3 }}</p>
+                                <p>受け渡し場所: {{ req.wanted_material.wm_prefecture }} {{ req.wanted_material.wm_city }} {{ req.wanted_material.wm_address }}</p>
+                                <p>数量: {{ req.wanted_material.quantity }}</p>
+                                <p>締切日: {{ req.wanted_material.deadline.strftime('%Y-%m-%d') if req.wanted_material.deadline else '未設定' }}</p>
+                                <p>土日受け渡し: 
+                                    {% if req.wanted_material.exclude_weekends %}
+                                        不可
+                                    {% else %}
+                                        可能
+                                    {% endif %}
+                                </p>
+                                <p>備考: {{ req.wanted_material.note or 'なし' }}</p>
+                                <form method="POST" action="{{ url_for('requests_bp.cancel_request', request_id=req.id) }}" style="display:inline;">
+                                    {{ cancel_request_form.hidden_tag() }}
+                                    {{ cancel_request_form.submit(class="btn btn-secondary", value="リクエスト取り消し") }}
+                                </form>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        </section>
+
+        <!-- 端材が欲しい セクション -->
+        <section class="want-section mb-5">
+            <h2>端材が欲しい</h2>
+            <div class="button-group mb-3">
+                <a href="{{ url_for('materials.register_wanted') }}" class="btn btn-primary me-2">欲しい端材登録</a>
+                <a href="{{ url_for('search.search_materials') }}" class="btn btn-primary me-2">欲しい端材を検索</a>
+                <a href="{{ url_for('materials.material_wanted_list') }}" class="btn btn-primary me-2">欲しい端材一覧</a>
+            </div>
+
+            {% if matched_wanted_materials %}
+                <div class="matched-history mb-4">
+                    <h3>マッチ履歴（未完了・欲しい端材）</h3>
+                    <ul class="list-group">
+                        {% for wanted_material in matched_wanted_materials %}
+                            <li class="list-group-item">
+                                <p>種類: {{ wanted_material.type }}</p>
+                                {% if wanted_material.type == "木材" and wanted_material.wood_type %}
+                                    <p>木材の種類: {{ wanted_material.wood_type }}</p>
+                                {% elif wanted_material.type == "ボード材" and wanted_material.board_material_type %}
+                                    <p>ボード材の種類: {{ wanted_material.board_material_type }}</p>
+                                {% elif wanted_material.type == "パネル材" and wanted_material.panel_type %}
+                                    <p>パネル材の種類: {{ wanted_material.panel_type }}</p>
+                                {% endif %}
+                                <p>サイズ：{{ wanted_material.size_1 }}×{{ wanted_material.size_2 }}×{{ wanted_material.size_3 }}</p>
+                                <p>受け渡し場所: {{ wanted_material.wm_prefecture }} {{ wanted_material.wm_city }} {{ wanted_material.wm_address }}</p>
+                                <p>数量: {{ wanted_material.quantity }}</p>
+                                <p>締切日: {{ wanted_material.deadline.strftime('%Y-%m-%d') if wanted_material.deadline else '未設定' }}</p>
+                                <p>土日受け渡し: 
+                                    {% if wanted_material.exclude_weekends %}
+                                        不可
+                                    {% else %}
+                                        可能
+                                    {% endif %}
+                                </p>
+                                <p>備考: {{ wanted_material.note or 'なし' }}</p>
+                                <p>マッチ日時: {{ wanted_material.matched_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                                
+                                {% if wanted_material.requests %}
+                                    {% for req in wanted_material.requests %}
+                                        {% if req.requester_user %}
+                                            <p>リクエスト送信者: {{ req.requester_user.company_name }} ({{ req.requester_user.prefecture }} {{ req.requester_user.city }} {{ req.requester_user.address }})</p>
+                                            <p>業種: {{ req.requester_user.industry }}</p>
+                                            <p>職種: {{ req.requester_user.job_title }}</p>
+                                        {% else %}
+                                            <p>リクエスト送信者の情報はありません。</p>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <p>リクエストはありません。</p>
+                                {% endif %}
+                                
+                                {% if wanted_material.owner.id == current_user.id or current_user.id in same_location_user_ids %}
+                                    <form method="POST" action="{{ url_for('requests_bp.complete_match_wanted', wanted_material_id=wanted_material.id) }}">
+                                        {{ complete_match_form.hidden_tag() }}
+                                        {{ complete_match_form.submit(class="btn btn-primary") }}
+                                    </form>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            {% if received_requests_wanted_materials %}
+            <div class="matched-history mb-4">
+                <h3>届いたリクエスト（欲しい端材）</h3>
+                <ul class="list-group">
+                    {% for req in received_requests_wanted_materials %}
+                        <li class="list-group-item">
+                            {% if req.wanted_material.image and req.wanted_material.image != 'default.jpg' %}
+                                <img src="{{ url_for('static', filename='images/' ~ req.wanted_material.image) }}" alt="欲しい端材の画像" id="imagePreview">
+                            {% else %}
+                                <p>登録された画像はありません</p>
+                            {% endif %}
+                            <p>種類: {{ req.wanted_material.type }}</p>
+                            {% if req.wanted_material.type == "木材" and req.wanted_material.wood_type %}
+                                <p>木材の種類: {{ req.wanted_material.wood_type }}</p>
+                            {% elif req.wanted_material.type == "ボード材" and req.wanted_material.board_material_type %}
+                                <p>ボード材の種類: {{ req.wanted_material.board_material_type }}</p>
+                            {% elif req.wanted_material.type == "パネル材" and req.wanted_material.panel_type %}
+                                <p>パネル材の種類: {{ req.wanted_material.panel_type }}</p>
+                            {% endif %}
+                            <p>サイズ：{{ req.wanted_material.size_1 }}×{{ req.wanted_material.size_2 }}×{{ req.wanted_material.size_3 }}</p>
+                            <p>受け渡し場所: {{ req.wanted_material.wm_prefecture }} {{ req.wanted_material.wm_city }} {{ req.wanted_material.wm_address }}</p>
+                            <p>数量: {{ req.wanted_material.quantity }}</p>
+                            <p>締切日: {{ req.wanted_material.deadline.strftime('%Y-%m-%d') if req.wanted_material.deadline else '未設定' }}</p>
+                            <p>土日受け渡し: 
+                                {% if req.wanted_material.exclude_weekends %}
+                                    不可
+                                {% else %}
+                                    可能
+                                {% endif %}
+                            </p>
+                            <p>備考: {{ req.wanted_material.note or 'なし' }}</p>
+                            
+                            <p>業種: {{ req.requester_user.industry }}</p>
+                            <p>職種: {{ req.requester_user.job_title }}</p>
+                            
+                            <form method="POST" action="{{ url_for('requests_bp.accept_request_wanted', request_id=req.id) }}">
+                                {{ accept_request_wanted_form.hidden_tag() }}
+                                {{ accept_request_wanted_form.submit(class="btn btn-primary") }}
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        
+
+
+            {% if sent_requests_materials %}
+                <div class="sent-requests mb-4">
+                    <h3>送信リクエスト（提供端材）</h3>
+                    <ul class="list-group">
+                        {% for req in sent_requests_materials %}
+                            <li class="list-group-item">
+                                <p>提供ユーザー: {{ req.material.owner.company_name }} ({{ req.material.owner.prefecture }} {{ req.material.owner.city }} {{ req.material.owner.address }})</p>
+                                {% if req.material.image and req.material.image != 'default.jpg' %}
+                                    <img src="{{ url_for('static', filename='images/' ~ req.material.image) }}" alt="端材の画像" id="imagePreview">
+                                {% else %}
+                                    <p>登録された画像はありません</p>
+                                {% endif %}
+                                <p>種類: {{ req.material.type }}</p>
+                                {% if req.material.type == "木材" and req.material.wood_type %}
+                                    <p>木材の種類: {{ req.material.wood_type }}</p>
+                                {% elif req.material.type == "ボード材" and req.material.board_material_type %}
+                                    <p>ボード材の種類: {{ req.material.board_material_type }}</p>
+                                {% elif req.material.type == "パネル材" and req.material.panel_type %}
+                                    <p>パネル材の種類: {{ req.material.panel_type }}</p>
+                                {% endif %}
+                                <p>サイズ：{{ req.material.size_1 }}×{{ req.material.size_2 }}×{{ req.material.size_3 }}</p>
+                                <p>受け渡し場所: {{ req.material.m_prefecture }} {{ req.material.m_city }} {{ req.material.m_address }}</p>
+                                <p>数量: {{ req.material.quantity }}</p>
+                                <p>締切日: {{ req.material.deadline.strftime('%Y-%m-%d') if req.material.deadline else '未設定' }}</p>
+                                <p>土日受け渡し: 
+                                    {% if req.material.exclude_weekends %}
+                                        不可
+                                    {% else %}
+                                        可能
+                                    {% endif %}
+                                </p>
+                                <p>備考: {{ req.material.note or 'なし' }}</p>
+                                <form method="POST" action="{{ url_for('requests_bp.cancel_request', request_id=req.id) }}" style="display:inline;">
+                                    {{ cancel_request_form.hidden_tag() }}
+                                    {{ cancel_request_form.submit(class="btn btn-secondary", value="リクエスト取り消し") }}
+                                </form>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+        </section>
+
+        <!-- 同一の属性を持つユーザーの一覧表示（オプション） -->
+        {% if same_location_users %}
+            <div class="same-location-users mb-4">
+                <h2>会社内ユーザー一覧（同所在地）</h2>
+                <ul class="list-group">
+                    {% for user in same_location_users %}
+                        <li class="list-group-item">
+                            <p>{{ user.contact_name }}</p>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    </div>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

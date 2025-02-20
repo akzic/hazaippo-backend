@@ -1,0 +1,22 @@
+branch-defaults:
+  first-deploy:
+    environment: THE-IRIYO-env
+    group_suffix: null
+environment-defaults:
+  THE-IRIYO-env:
+    branch: first-deploy
+    repository: THE-IRIYO
+global:
+  application_name: THE-IRIYO
+  branch: first-deploy
+  default_ec2_keyname: aws-eb
+  default_platform: Python 3.9 running on 64bit Amazon Linux 2023
+  default_region: ap-northeast-1
+  include_git_submodules: true
+  instance_profile: null
+  platform_name: null
+  platform_version: null
+  profile: eb-cli
+  repository: THE-IRIYO
+  sc: git
+  workspace_type: Application

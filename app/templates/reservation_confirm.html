@@ -1,0 +1,161 @@
+<!-- templates/reservation_confirm.html -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>予約確認 | はざいっぽ</title>
+    <link rel="stylesheet" href="/static/css/reservation_confirm.css">
+    <script src="/static/js/reservation_confirm.js"></script>
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>予約確認</h1>
+    <main class="container">
+        <!-- 確定した予約情報 -->
+        <section id="reservation-details">
+            <h2>確定した予約</h2>
+
+            <!-- 予約がない場合に表示 -->
+            {% if not has_reservations %}
+                <p>予約がありません。</p>
+            {% else %}
+                <!-- 予約がある場合にリスト表示 -->
+                <form id="cancel-form" method="POST">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all"></th>
+                                <th>予約日程</th>
+                                <th>レクチャー担当</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reservation in reservations %}
+                                <tr>
+                                    <td><input type="checkbox" name="reservation_ids" value="{{ reservation.id }}"></td>
+                                    <td><strong>予約日程:</strong> {{ reservation.date }} {{ reservation.start_time.strftime('%H:%M') }} ~ {{ reservation.end_time.strftime('%H:%M') }}</td>
+                                    <td><strong>レクチャー担当:</strong> {% if reservation.lecturer %} {{ reservation.lecturer.contact_name }} {% else %}レクチャー担当なし{% endif %}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" id="cancel-selected-button" onclick="confirmCancelSelected()">選択した日程をキャンセル</button>
+                </form>
+            {% endif %}
+        </section>
+
+        <!-- リクエスト状況の表示（もしあれば） -->
+        {% if pending_request %}
+        <section id="request-status">
+            <h2>リクエスト状況</h2>
+            <p><strong>リクエスト日程:</strong> {{ pending_request.date }} {{ pending_request.start_time.strftime('%H:%M') }} ~ {{ pending_request.end_time.strftime('%H:%M') }}</p>
+            <p><strong>レクチャー担当:</strong> {{ pending_request.lecturer.contact_name }}</p>
+            <button id="cancel-request-button" onclick="confirmRequestCancel()">リクエストをキャンセル</button>
+        </section>
+        {% endif %}
+
+        <!-- キャンセル確認ダイアログ -->
+        <div id="cancel-dialog" style="display:none;">
+            <p>選択した予約をキャンセルしてもよろしいですか？</p>
+            <button id="confirm-cancel" onclick="cancelSelectedReservations()">確定</button>
+            <button id="cancel-cancel" onclick="closeCancelDialog()">キャンセル</button>
+        </div>
+
+        <!-- リクエストキャンセル確認ダイアログ -->
+        <div id="request-cancel-dialog" style="display:none;">
+            <p>リクエストをキャンセルしてもよろしいですか？</p>
+            <button id="confirm-request-cancel" onclick="cancelRequest()">確定</button>
+            <button id="cancel-request-cancel" onclick="closeRequestCancelDialog()">キャンセル</button>
+        </div>
+
+        <!-- キャンセル完了メッセージ -->
+        <div id="cancel-complete" style="display:none;">
+            <p>予約がキャンセルされました。</p>
+        </div>
+
+        <!-- リクエストキャンセル完了メッセージ -->
+        <div id="request-cancel-complete" style="display:none;">
+            <p>リクエストがキャンセルされました。</p>
+        </div>
+
+        <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+    </main>
+
+    <script>
+        // Select all checkboxes
+        document.getElementById('select-all').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('input[name="reservation_ids"]');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+        });
+
+        function confirmCancelSelected() {
+            // Show the cancel confirmation dialog
+            document.getElementById('cancel-dialog').style.display = 'block';
+        }
+
+        function closeCancelDialog() {
+            // Hide the cancel confirmation dialog
+            document.getElementById('cancel-dialog').style.display = 'none';
+        }
+
+        function cancelSelectedReservations() {
+            // Get all selected reservation IDs
+            const checkboxes = document.querySelectorAll('input[name="reservation_ids"]:checked');
+            const reservationIds = Array.from(checkboxes).map(cb => cb.value);
+
+            if (reservationIds.length === 0) {
+                alert('キャンセルする予約を選択してください。');
+                return;
+            }
+
+            // Send the reservation IDs to the server via AJAX
+            fetch("{{ url_for('terminal.cancel_multiple_reservations') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'  // Remove or adjust if not using CSRF protection
+                },
+                body: JSON.stringify({ reservation_ids: reservationIds })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Hide the dialog and show the completion message
+                    document.getElementById('cancel-dialog').style.display = 'none';
+                    document.getElementById('cancel-complete').style.display = 'block';
+                    setTimeout(function() {
+                        document.getElementById('cancel-complete').style.display = 'none';
+                        window.location.href = "{{ url_for('dashboard.dashboard_home') }}";
+                    }, 5000);
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('予約のキャンセル中にエラーが発生しました。');
+            });
+        }
+
+        function confirmRequestCancel() {
+            document.getElementById('request-cancel-dialog').style.display = 'block';
+        }
+
+        function closeRequestCancelDialog() {
+            document.getElementById('request-cancel-dialog').style.display = 'none';
+        }
+
+        function cancelRequest() {
+            // リクエストキャンセル処理を行う
+            document.getElementById('request-cancel-dialog').style.display = 'none';
+            document.getElementById('request-cancel-complete').style.display = 'block';
+            setTimeout(function() {
+                document.getElementById('request-cancel-complete').style.display = 'none';
+                window.location.href = "{{ url_for('dashboard.dashboard_home') }}";
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

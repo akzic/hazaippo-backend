@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>欲しい端材 一括登録 - はざいっぽ</title>
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/register_material.css') }}">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    /* コンテナ横幅を広めに */
+    .bulk-container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 10px;
+    }
+    /* 各エントリーをコンパクトに */
+    .bulk-entry {
+      padding: 5px 8px;
+      margin-bottom: 8px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      background-color: #fff;
+    }
+    .bulk-entry .row {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 3px;
+      align-items: center;
+    }
+    .bulk-entry .col {
+      flex: 1;
+      min-width: 100px;
+      margin-right: 5px;
+    }
+    .bulk-entry label {
+      margin: 0;
+      font-size: 0.85rem;
+    }
+    .bulk-entry .form-control {
+      height: 30px;
+      font-size: 0.85rem;
+      padding: 2px 5px;
+    }
+    /* サブタイプフィールド用コンテナ：上マージンを 0 にして端材の種類と揃える */
+    .subtype-container {
+      margin-top: 0;
+    }
+    .subtype-container .subtype-field {
+      display: none;
+    }
+    /* フォーム下部のボタン群 */
+    .form-buttons {
+      text-align: center;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  {% include 'header.html' %}
+  <div class="container bulk-container mt-5">
+    <h1>欲しい端材 一括登録</h1>
+    <form method="POST" action="{{ url_for('materials.bulk_register_wanted') }}">
+      {{ form.hidden_tag() }}
+      {% for subform in form.materials %}
+        <div class="bulk-entry">
+          <!-- 1行目：端材の種類とサブタイプ -->
+          <div class="row">
+            <div class="col" style="flex: 0 0 45%;">
+              {{ subform.material_type.label }}<br>
+              {{ subform.material_type(class="form-control material-type") }}
+            </div>
+            <div class="col" style="flex: 0 0 45%;">
+              <div class="subtype-container">
+                <div class="subtype-field wood">
+                  {{ subform.wood_type.label }}<br>
+                  {{ subform.wood_type(class="form-control") }}
+                </div>
+                <div class="subtype-field board">
+                  {{ subform.board_material_type.label }}<br>
+                  {{ subform.board_material_type(class="form-control") }}
+                </div>
+                <div class="subtype-field panel">
+                  {{ subform.panel_type.label }}<br>
+                  {{ subform.panel_type(class="form-control") }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 2行目：数量とサイズ -->
+          <div class="row">
+            <div class="col" style="flex: 0 0 15%;">
+              {{ subform.quantity.label }}<br>
+              {{ subform.quantity(class="form-control", min="1", max="100") }}
+            </div>
+            <div class="col" style="flex: 1;">
+              <label>サイズ（mm）</label><br>
+              {{ subform.material_size_1(class="form-control", style="display:inline-block; width:70px;") }}
+              <span>×</span>
+              {{ subform.material_size_2(class="form-control", style="display:inline-block; width:70px;") }}
+              <span>×</span>
+              {{ subform.material_size_3(class="form-control", style="display:inline-block; width:70px;") }}
+            </div>
+          </div>
+          <!-- 3行目：締め切り、土日除く、注意点 -->
+          <div class="row">
+            <div class="col" style="flex: 0 0 45%;">
+              {{ subform.deadline.label }}<br>
+              <div style="display: flex; align-items: center;">
+                {{ subform.deadline(class="form-control", type="date", style="flex:1;") }}
+                <div style="display: inline-flex; align-items: center; margin-left: 5px;">
+                  {{ subform.exclude_weekends(class="form-check-input") }} 
+                  <label style="font-size:0.8rem; margin: 0 0 0 3px;">土日を除く</label>
+                </div>
+              </div>
+            </div>
+            <div class="col" style="flex: 0 0 45%; margin-left:10px;">
+              {{ subform.note.label }}<br>
+              {{ subform.note(class="form-control", rows="1") }}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+      <!-- ボタン群 -->
+      <div class="form-buttons">
+        {{ form.submit(class="btn btn-primary", style="line-height:40px;") }}
+        <a href="{{ url_for('dashboard.dashboard_home') }}" class="btn btn-secondary" style="margin-left:10px; line-height:40px;">戻る</a>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    $(document).ready(function(){
+      // 各エントリー内の material-type セレクトに change イベントを設定
+      $('.material-type').each(function(){
+        var $this = $(this);
+        function updateSubtype(){
+          var val = $this.val();
+          // 該当エントリー内の subtype-container を探す
+          var container = $this.closest('.row').next('.row').prev().find('.subtype-container');
+          container.find('.subtype-field').hide();
+          if(val === "木材"){
+            container.find('.wood').show();
+          } else if(val === "ボード材"){
+            container.find('.board').show();
+          } else if(val === "パネル材"){
+            container.find('.panel').show();
+          }
+        }
+        $this.change(updateSubtype);
+        updateSubtype(); // 初期状態の更新
+      });
+    });
+  </script>
+</body>
+</html>

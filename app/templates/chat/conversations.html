@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/conversations.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>あなたの会話一覧</h2>
+    <ul class="list-group">
+        {% for convo in conversations %}
+            {% set other_user = convo.user2 if convo.user1_id == current_user.id else convo.user1 %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <a href="{{ url_for('chat.conversation_view', conversation_id=convo.id) }}">
+                    {{ other_user.company_name }} {{ other_user.contact_name }} 様との会話
+                </a>
+                <span class="text-muted">{{ convo.created_at|format_datetime_jst }}</span>
+            </li>
+        {% else %}
+            <li class="list-group-item">まだ会話はありません。</li>
+        {% endfor %}
+    </ul>
+
+    <h3 class="mt-4">新しい会話を開始</h3>
+    <form id="start-conversation-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label for="user">ユーザーを選択:</label>
+            <select class="form-control" id="user" name="user_id" required>
+                <option value="">ユーザーを選択してください</option>
+                {% for item in users %}
+                    <option value="{{ item.user.id }}">
+                        {{ item.user.company_name }} {{ item.user.contact_name }} 
+                        {% if item.last_matching_date %}
+                            マッチング日時：{{ item.last_matching_date }}
+                        {% else %}
+                            マッチング日時：未設定
+                        {% endif %}
+                    </option>
+                {% endfor %}
+              </select>              
+        </div>
+        <div class="button-group mt-2">
+            <button type="submit" class="btn btn-orange">会話を開始</button>
+            <button type="button" class="btn btn-back" id="back-button">戻る</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#start-conversation-form').submit(function(e) {
+            e.preventDefault();
+            var user_id = $('#user').val();
+            if(user_id){
+                window.location.href = "{{ url_for('chat.start_conversation', user_id=0) }}".replace('/0', '/' + user_id);
+            } else {
+                alert('ユーザーを選択してください。');
+            }
+        });
+
+        $('#back-button').click(function() {
+            window.location.href = "{{ url_for('dashboard.dashboard_home') }}";
+        });
+    });
+</script>
+{% endblock %}

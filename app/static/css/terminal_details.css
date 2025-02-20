@@ -1,0 +1,104 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #4db995; /* 見出しの色 */
+}
+
+h2 {
+    font-size: 20px;
+    margin-bottom: 15px;
+    color: #4db995; /* セクション見出しの色 */
+}
+
+section {
+    margin-bottom: 20px;
+}
+
+#map {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.image-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+}
+
+.image-gallery img {
+    max-width: 200px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+#action-buttons {
+    text-align: center;
+    margin-top: 20px;
+}
+
+#action-buttons button {
+    background-color: #d66a35; /* 操作ボタンの色 */
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    margin: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#action-buttons button:hover {
+    background-color: #b45628; /* ボタンホバー時の色 */
+}
+
+#favorite-message {
+    background-color: #dff0d8;
+    color: #3c763d;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.back-button {
+    display: inline-block;
+    background-color: #6c757d; /* 戻るボタンの色 */
+    color: white;
+    text-align: center;
+    padding: 10px 20px;
+    width: 100px;
+    height: 26px; /* ボタンの高さ */
+    line-height: 26px;
+    border-radius: 5px;
+    text-decoration: none;
+    margin-top: 20px;
+}
+
+.back-button:hover {
+    background-color: #5a6268; /* 戻るボタンホバー時の色 */
+}
+
+@media (max-width: 600px) {
+    h1, h2 {
+        font-size: 18px;
+    }
+
+    #action-buttons button {
+        width: 100%;
+        margin: 5px 0;
+    }
+
+    .image-gallery img {
+        max-width: 100px;
+    }
+}

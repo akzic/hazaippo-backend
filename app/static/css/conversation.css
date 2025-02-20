@@ -1,0 +1,250 @@
+/* app/static/css/conversation.css */
+
+/* Container Styling */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header Styling */
+h2 {
+    margin-bottom: 20px;
+    color: #333333;
+    font-family: 'Arial', sans-serif;
+}
+
+/* Messages Styling */
+#messages {
+    background-color: #ffffff;
+    border: 1px solid #dddddd;
+    border-radius: 5px;
+    padding: 15px;
+    height: 400px;
+    overflow-y: scroll;
+}
+
+.message {
+    margin-bottom: 15px;
+}
+
+.message.text-right {
+    text-align: right;
+}
+
+.message.text-left {
+    text-align: left;
+}
+
+.message strong {
+    display: block;
+    color: #d66a35;
+    font-weight: bold;
+}
+
+.message .text-muted {
+    font-size: 12px;
+    color: #999999;
+}
+
+.message p {
+    margin: 5px 0;
+    font-size: 14px;
+    color: #333333;
+}
+
+.message a {
+    color: #d66a35;
+    text-decoration: none;
+}
+
+.message a:hover {
+    text-decoration: underline;
+}
+
+.message em {
+    font-size: 12px;
+    color: #888888;
+}
+
+/* 添付画像のスタイル */
+.message img.attachment-image {
+    max-width: 150px;
+    height: auto;
+    cursor: pointer;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px;
+    transition: 0.3s;
+}
+
+.message img.attachment-image:hover {
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+/* 添付ファイルリンクのスタイル */
+.attachment-file .attachment-link {
+    display: inline-block;
+    color: #d66a35;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.attachment-file .attachment-link i {
+    margin-right: 5px;
+}
+
+/* モーダルオーバーレイのスタイル */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-overlay .modal-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+    text-align: center;
+}
+
+.modal-overlay img {
+    max-width: 100%;
+    max-height: 80vh;
+    border: 2px solid #fff;
+    border-radius: 4px;
+}
+
+.modal-overlay .download-button {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 8px 16px;
+    background-color: #d66a35;
+    color: #ffffff;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.modal-overlay .download-button:hover {
+    background-color: #c2592a;
+}
+
+/* Buttons Styling */
+.btn-back {
+    background-color: gray;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-back:hover {
+    background-color: #5a5a5a;
+}
+
+.btn-orange {
+    background-color: #d66a35;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-orange:hover {
+    background-color: #c2592a;
+}
+
+/* Form Styling */
+form {
+    margin-top: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+textarea.form-control {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    resize: vertical;
+    font-size: 14px;
+}
+
+input[type="file"] {
+    margin-top: 10px;
+}
+
+button[type="submit"],
+button[type="button"] {
+    margin-top: 10px;
+}
+
+/* Modal Styling */
+.modal-header {
+    background-color: #f2f2f2;
+    border-bottom: 1px solid #dddddd;
+}
+
+.modal-title {
+    color: #333333;
+}
+
+.modal-footer {
+    background-color: #f2f2f2;
+    border-top: 1px solid #dddddd;
+}
+
+.close {
+    color: #aaaaaa;
+    opacity: 1;
+}
+
+.close:hover {
+    color: #000000;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: #d66a35;
+    border-color: #d66a35;
+}
+
+.btn-secondary {
+    background-color: #d66a35;
+    border-color: #d66a35;
+}
+
+/* Responsive Styling */
+@media (max-width: 600px) {
+    .btn-back,
+    .btn-orange {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    #messages {
+        height: 300px;
+    }
+
+    /* モーダル画像の調整 */
+    .modal-overlay .modal-content img {
+        max-width: 95%;
+        max-height: 90vh;
+    }
+}

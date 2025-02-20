@@ -1,0 +1,185 @@
+/* /static/css/lecturer_schedule_management.css */
+
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #4db995;
+}
+
+h2 {
+    font-size: 20px;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.container {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+section {
+    margin-bottom: 20px;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 10px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+th, td {
+    padding: 10px;
+    border: 1px solid #ccc;
+    text-align: center;
+}
+
+button {
+    background-color: #d66a35;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    margin-top: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #b45628;
+}
+
+.btn-primary {
+    background-color: #d66a35;
+}
+
+.btn-primary:hover {
+    background-color: #b45628;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+}
+
+.disabled-row {
+    background-color: #e0e0e0;
+}
+
+.modal {
+    padding: 20px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 300px;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    display: none; /* 初期状態は非表示 */
+}
+
+.modal.show {
+    display: block;
+}
+
+#confirm-complete {
+    background-color: #dff0d8;
+    border-color: #d6e9c6;
+    color: #3c763d;
+}
+
+#response-modal p {
+    margin-bottom: 20px;
+}
+
+.back-button {
+    background-color: #6c757d;
+    color: #fff;
+    padding: 10px 20px;
+    width: 50px;
+    height: 20px;
+    border-radius: 5px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s ease;
+    margin-top: 20px;
+}
+
+.back-button:hover {
+    background-color: #5a6268;
+}
+
+.styled-select {
+    width: 100%;
+    padding: 10px;
+    font-size: 16px;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    appearance: none;
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+
+.styled-select:focus {
+    outline: none;
+    border-color: #4db995;
+    box-shadow: 0 0 5px rgba(77, 185, 149, 0.5);
+}
+
+@media (max-width: 600px) {
+    h1, h2 {
+        font-size: 18px;
+    }
+
+    button {
+        width: 100%;
+        margin: 10px 0;
+    }
+
+    .modal {
+        width: 90%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    .styled-select {
+        font-size: 14px;
+        padding: 8px;
+    }
+}

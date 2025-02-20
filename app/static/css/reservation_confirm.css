@@ -1,0 +1,157 @@
+/* static/css/reservation_confirm.css */
+
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #4db995; /* 見出しの色 */
+}
+
+h2 {
+    font-size: 20px;
+    margin-bottom: 15px;
+    color: #4db995; /* セクション見出しの色 */
+}
+
+section {
+    margin-bottom: 20px;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+}
+
+p {
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+button {
+    background-color: #d66a35; /* ボタンの色 */
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    margin-top: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #b45628; /* ボタンホバー時の色 */
+}
+
+#cancel-dialog, #request-cancel-dialog {
+    padding: 20px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    width: 300px;
+    margin: 20px auto;
+    text-align: center;
+}
+
+#cancel-complete, #request-cancel-complete {
+    padding: 20px;
+    background-color: #dff0d8;
+    border: 1px solid #d6e9c6;
+    color: #3c763d;
+    text-align: center;
+    border-radius: 5px;
+    margin-top: 20px;
+}
+
+.back-button {
+    display: inline-block;
+    background-color: #6c757d; /* 戻るボタンの色 */
+    color: white;
+    text-align: center;
+    padding: 10px 20px;
+    width: 100px;
+    height: 26px; /* ボタンの高さ */
+    line-height: 26px;
+    border-radius: 5px;
+    text-decoration: none;
+    margin-top: 20px;
+}
+
+.back-button:hover {
+    background-color: #5a6268; /* 戻るボタンホバー時の色 */
+}
+
+@media (max-width: 600px) {
+    h1, h2 {
+        font-size: 18px;
+    }
+
+    button {
+        width: 100%;
+        margin: 10px 0;
+    }
+
+    #cancel-dialog, #request-cancel-dialog {
+        width: 90%;
+    }
+}
+
+/* 追加: テーブルのスタイリング */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 15px;
+}
+
+thead th {
+    background-color: #f2f2f2;
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #ccc;
+}
+
+tbody td {
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* 追加: チェックボックスのスタイリング */
+input[type="checkbox"] {
+    transform: scale(1.2);
+    margin: 5px;
+}
+
+/* 追加: ダイアログ内ボタンのスタイリング */
+#cancel-dialog button, #request-cancel-dialog button {
+    width: 45%;
+    margin: 5px;
+}
+
+/* 追加: メッセージボックスのアニメーション */
+#cancel-complete, #request-cancel-complete {
+    animation: fadeInOut 5s forwards;
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { opacity: 0; }
+}

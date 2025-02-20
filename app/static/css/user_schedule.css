@@ -1,0 +1,192 @@
+/* user_schedule.css */
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #4db995; /* 見出しの色 */
+}
+
+h2 {
+    font-size: 20px;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+section {
+    margin-bottom: 20px;
+}
+
+select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #fff;
+    margin-bottom: 10px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 10px;
+    text-align: center;
+}
+
+th {
+    background-color: #f9f9f9;
+    color: #333;
+}
+
+td {
+    background-color: #fff;
+}
+
+button {
+    background-color: #d66a35; /* ボタンの色 */
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    width: 100px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #b45628; /* ボタンホバー時の色 */
+}
+
+#reservation-dialog {
+    position: fixed; /* 固定位置 */
+    top: 50%; /* 画面の中央 */
+    left: 50%;
+    transform: translate(-50%, -50%); /* 中央に配置 */
+    z-index: 1000; /* 他の要素より前面に表示 */
+    padding: 20px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    width: 300px;
+    text-align: center;
+}
+
+#lecture-selection {
+    margin-top: 10px;
+}
+
+#confirm-reservation, #cancel-reservation {
+    width: 100px;
+    margin: 10px;
+}
+
+#reservation-confirmation {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    padding: 20px;
+    background-color: #dff0d8;
+    border: 1px solid #d6e9c6;
+    color: #3c763d;
+    text-align: center;
+    border-radius: 5px;
+    margin-top: 20px;
+}
+
+.back-button {
+    display: inline-block;
+    background-color: #6c757d; /* 戻るボタンの色 */
+    color: white;
+    text-align: center;
+    padding: 10px;
+    width: 100px;
+    height: 26px; /* ボタンの高さ */
+    line-height: 26px;
+    border-radius: 5px;
+    text-decoration: none;
+    margin-top: 20px;
+}
+
+.back-button:hover {
+    background-color: #5a6268; /* 戻るボタンホバー時の色 */
+}
+
+/* 時間枠の予約ボタン用スタイル */
+.schedule-button {
+    background-color: #4db995; /* ボタンの色 */
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.schedule-button:hover {
+    background-color: #3a906f; /* ホバー時の色 */
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto 20px auto; /* 下に20pxの余白を追加 */
+    padding: 20px;
+    border: 1px solid #ccc; /* 枠線を追加 */
+    border-radius: 10px; /* 角を丸くする */
+    background-color: #fff; /* 背景色を白に設定 */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 影を追加 */
+}
+
+/* コンテナ間のスペース */
+.container + .container {
+    margin-top: 20px; /* コンテナ間の間隔 */
+}
+
+@media (max-width: 600px) {
+    h1, h2 {
+        font-size: 18px;
+    }
+    
+    th, td {
+        padding: 5px;
+    }
+    
+    button, .back-button {
+        width: 80px;
+        padding: 8px;
+    }
+    
+    #reservation-dialog {
+        width: 100%;
+    }
+}
+
+/* 予約済みの行のスタイル */
+.reserved-row {
+    background-color: #d3d3d3 !important; /* グレー */
+}
+
+/* 予約済みのボタンのスタイル */
+.reserved-button {
+    background-color: #b0b0b0; /* グレー */
+    cursor: not-allowed; /* 非活性化のマウスカーソル */
+}
+
+.back-button-container {
+    text-align: left;
+    margin-top: 20px;
+}

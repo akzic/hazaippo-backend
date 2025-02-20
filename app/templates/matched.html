@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>マッチ履歴 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/matched.css') }}">
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>マッチ履歴（完了済み）</h1>
+    <div class="completed-history">
+        {% if completed_materials %}
+            <ul>
+                {% for material in completed_materials %}
+                    <li>
+                        <p>材料: {{ material.type }} ({{ material.size_1 }}×{{ material.size_2 }}×{{ material.size_3 }})</p>
+                        <p>場所: {{ material.location }}</p>
+                        <p>完了日時: {{ material.completed_at|format_datetime_jst }}</p>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>完了済みの端材はありません。</p>
+        {% endif %}
+    </div>
+    <div class="button-group">
+        <a href="{{ url_for('dashboard.dashboard_home') }}" class="btn btn-secondary">戻る</a>
+    </div>
+</body>
+</html>

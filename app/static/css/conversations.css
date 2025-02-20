@@ -1,0 +1,104 @@
+/* app/static/css/conversations.css */
+
+/* Container Styling */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header Styling */
+h2 {
+    margin-bottom: 20px;
+    color: #333333;
+    font-family: 'Arial', sans-serif;
+}
+
+/* List Group Styling */
+.list-group {
+    padding: 0;
+}
+
+.list-group-item {
+    border: 1px solid #dddddd;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    padding: 15px;
+    background-color: #f9f9f9;
+}
+
+.list-group-item a {
+    text-decoration: none;
+    color: #d66a35;
+    font-weight: bold;
+}
+
+.list-group-item a:hover {
+    text-decoration: underline;
+}
+
+/* Buttons Styling */
+.btn-back {
+    background-color: gray;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-back:hover {
+    background-color: #5a5a5a;
+}
+
+.btn-orange {
+    background-color: #d66a35;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-orange:hover {
+    background-color: #c2592a;
+}
+
+/* Form Styling */
+form {
+    margin-top: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+    color: #555555;
+}
+
+select.form-control {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+}
+
+button[type="submit"],
+button[type="button"] {
+    margin-right: 10px;
+}
+
+/* Responsive Styling */
+@media (max-width: 600px) {
+    .btn-back,
+    .btn-orange {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}

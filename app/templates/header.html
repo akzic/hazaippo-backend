@@ -1,0 +1,122 @@
+<!-- app/templates/header.html -->
+
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/header.css') }}">
+
+<header>
+    <div class="header-content">
+        <div class="left-group">
+            <!-- Updated App Name with Link -->
+            <a href="{{ url_for('dashboard.dashboard_home') }}" class="app-name-link">
+                <span class="app-name">はざいっぽ</span>
+            </a>
+            
+            <ul class="nav-links left">
+                <li class="dropdown">
+                    <a href="#">端材検索</a>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('search.search_materials') }}">欲しい端材を検索</a>
+                        <a href="{{ url_for('search.search_wanted_materials') }}">材料を必要としている人を検索</a>
+                    </div>
+                </li>
+                <li class="dropdown">
+                    <a href="#">端材登録</a>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('materials.register_material') }}">提供する端材登録</a>
+                        <a href="{{ url_for('materials.register_wanted') }}">欲しい端材登録</a>
+                    </div>
+                </li>
+                <li><a href="{{ url_for('materials.material_list') }}">端材一覧</a></li>
+
+                <!-- ターミナルメニューの修正 -->
+                <li class="dropdown">
+                    <a href="#">ターミナル</a>
+                    <div class="dropdown-content">
+                        <!-- terminal_id に関係なく表示されるメニュー -->
+                        <a href="{{ url_for('terminal.video_viewing') }}">動画閲覧</a>
+                        <a href="{{ url_for('terminal.search_terminal') }}">ターミナル検索</a>
+                        <a href="{{ url_for('terminal.reservation_confirm', reservation_id=1) }}">予約確認</a>
+                    </div>
+                </li>
+                
+                <!-- レクチャーメニューの追加: lecture_flug が True の場合のみ表示 -->
+                {% if is_lecturer %}
+                    <li><a href="{{ url_for('terminal.lecturer_schedule_management') }}">レクチャー</a></li>
+                {% endif %}
+
+                <!-- ターミナル管理メニューの追加: 所属ターミナルが存在する場合のみ表示 -->
+                {% if has_affiliated_terminal %}
+                    <li class="dropdown">
+                        <a href="#">ターミナル管理</a>
+                        <div class="dropdown-content">
+                            <a href="{{ url_for('terminal_management.terminal_reservation_management') }}">ターミナル予約確認</a>
+                            <a href="{{ url_for('terminal_management.terminal_material_management') }}">ターミナル端材管理</a>
+                        </div>
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+        
+        <ul class="nav-links right">
+            <!-- 会社名と担当者名を表示 -->
+            {% if g.company_name and g.contact_name %}
+                <li class="dropdown">
+                    <a href="#">
+                        {{ g.company_name }}：{{ g.contact_name }}様
+                        <span class="notification-badge" id="company-notification" style="display: none;"></span>
+                    </a>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('profile.view_profile') }}">プロフィール</a>
+                        <a href="{{ url_for('chat.conversations') }}">
+                            チャット
+                            <span class="notification-badge" id="chat-notification" style="display: none;"></span>
+                        </a>
+                    </div>
+                </li>
+            {% endif %}
+            <li><a href="{{ url_for('auth.logout') }}">ログアウト</a></li>
+        </ul>
+    </div>
+</header>
+
+{% block scripts %}
+<!-- SocketIO クライアントライブラリ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- jQuery (既に含まれていない場合) -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap JS (既に含まれていない場合) -->
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        // SocketIO を初期化
+        var socket = io();
+
+        // 接続時の処理
+        socket.on('connect', function() {
+            console.log('通知用の SocketIO サーバーに接続しました。');
+        });
+
+        // 新しいメッセージ通知を受信
+        socket.on('new_message_notification', function(data) {
+            console.log('新しいメッセージ通知を受信:', data);
+
+            // 通知バッジを表示
+            $('#company-notification').show();
+            $('#chat-notification').show();
+
+            // オプション: 通知カウントを増やす場合
+            /*
+            var currentCount = parseInt($('#chat-notification').text()) || 0;
+            currentCount += 1;
+            $('#chat-notification').text(currentCount).show();
+            */
+        });
+
+        // ユーザーがチャットページに移動した際に通知バッジを非表示にする
+        $('a[href="{{ url_for("chat.conversations") }}"]').on('click', function() {
+            $('#company-notification').hide();
+            $('#chat-notification').hide();
+        });
+    });
+</script>
+{% endblock %}

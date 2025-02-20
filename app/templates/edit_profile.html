@@ -1,0 +1,80 @@
+<!-- templates/edit_profile.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>プロフィール編集 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/edit_profile.css') }}">
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="card">
+        <h1>プロフィール編集</h1>
+        <form id="editProfileForm" method="POST" action="{{ url_for('profile.edit_profile') }}">
+            {{ form.hidden_tag() }}
+            <div>
+                {% if current_user.business_structure == 0 %}
+                    {{ form.company_name.label }} {{ form.company_name(class="form-control") }}
+                {% elif current_user.business_structure == 1 %}
+                    <label for="company_name">屋号</label>
+                    {{ form.company_name(class="form-control") }}
+                {% elif current_user.business_structure == 2 %}
+                    <label for="company_name">ニックネーム</label>
+                    {{ form.company_name(class="form-control") }}
+                {% endif %}
+            </div>
+            <div>
+                <label for="prefecture">住所</label>
+                <div>
+                    {{ form.prefecture(class="form-control") }}
+                    {{ form.city(class="form-control", placeholder="市区町村") }}
+                    {{ form.address(class="form-control", placeholder="それ以降の住所") }}
+                </div>
+            </div>
+            {% if current_user.business_structure != 2 %}
+                <div>
+                    {{ form.company_phone.label }} {{ form.company_phone(class="form-control") }}
+                </div>
+                <div>
+                    {{ form.industry.label }} {{ form.industry(class="form-control") }}
+                </div>
+                <div>
+                    {{ form.job_title.label }} {{ form.job_title(class="form-control") }}
+                </div>
+            {% endif %}
+            <div class="form-group">
+                <div class="form-check">
+                    {{ form.without_approval(class="form-check-input", id="without_approval") }}
+                    <label class="form-check-label" for="without_approval">リクエスト受け取り時、承認をスキップする</label>
+                </div>
+            </div>
+            <div>
+                {% if current_user.business_structure == 2 %}
+                    <label for="contact_name">担当者</label>
+                {% else %}
+                    {{ form.contact_name.label }}
+                {% endif %}
+                {{ form.contact_name(class="form-control") }}
+            </div>
+            <div>
+                {% if current_user.business_structure == 2 %}
+                    <label for="contact_phone">電話番号</label>
+                {% else %}
+                    {{ form.contact_phone.label }}
+                {% endif %}
+                {{ form.contact_phone(class="form-control") }}
+            </div>
+            <div style="display: none;">
+                {{ form.line_id.label }} {{ form.line_id(class="form-control") }}
+            </div>
+            <div>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+            <div>
+                <a href="{{ url_for('profile.view_profile') }}" class="btn btn-secondary">戻る</a>
+            </div>
+        </form>
+    </div>
+    <script src="{{ url_for('static', filename='js/edit_profile.js') }}"></script>
+</body>
+</html>

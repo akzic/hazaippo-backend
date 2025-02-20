@@ -1,0 +1,63 @@
+<!-- app/templates/detail.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>提供端材の詳細 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/detail.css') }}">
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>端材の詳細</h1>
+    <div class="card">
+        {% if material.image and material.image != 'default.jpg' %}
+            <img src="{{ url_for('static', filename='images/' ~ material.image) }}" alt="端材の画像" id="imagePreview">
+        {% else %}
+            <p>登録された画像はありません</p>
+        {% endif %}
+        <p>種類: {{ material.type }}</p>
+        {% if material.type == "木材" and material.wood_type %}
+            <p>木材の種類: {{ material.wood_type }}</p>
+        {% elif material.type == "ボード材" and material.board_material_type %}
+            <p>ボード材の種類: {{ material.board_material_type }}</p>
+        {% elif material.type == "パネル材" and material.panel_type %}
+            <p>パネル材の種類: {{ material.panel_type }}</p>
+        {% endif %}
+        <p>受け渡し場所: {{ material.m_prefecture }} {{ material.m_city }} {{ material.m_address }}</p>
+        <p>数量: {{ material.quantity }}</p>
+        <p>締切日: {{ material.deadline.strftime('%Y-%m-%d') if material.deadline else '未設定' }}</p>
+        <p>土日受け渡し: 
+            {% if material.exclude_weekends %}
+                不可
+            {% else %}
+                可能
+            {% endif %}
+        </p>
+        <p>備考: {{ material.note or 'なし' }}</p>
+        <div class="button-group">
+            <button id="showProfileButton" class="btn btn-primary">ユーザーの詳細</button>
+            <a href="{{ url_for('requests_bp.request_material', material_id=material.id) }}" class="btn btn-primary">リクエスト</a>
+            <a href="{{ url_for('search.search_materials') }}" class="btn btn-secondary back-button">戻る</a>
+        </div>
+    </div>
+    <div id="profileDetails" style="display:none;">
+        <h2>ユーザーの詳細（マッチ数：{{ total_matched_count }}）</h2>
+        <p>形態: 
+            {% if user.business_structure == 0 %}
+                法人
+            {% elif user.business_structure == 1 %}
+                個人事業主
+            {% elif user.business_structure == 2 %}
+                個人
+            {% else %}
+                不明
+            {% endif %}
+        </p>
+        <p>ユーザー名: {{ user.company_name }}</p>
+        <p>住所: {{ user.prefecture }} {{ user.city }} {{ user.address }}</p>
+        <p>業種: {{ user.industry }}</p>
+        <p>職種: {{ user.job_title }}</p>
+    </div>
+    <script src="{{ url_for('static', filename='js/detail.js') }}"></script>
+</body>
+</html>

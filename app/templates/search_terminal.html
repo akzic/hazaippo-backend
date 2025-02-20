@@ -1,0 +1,506 @@
+<!-- templates/search_terminal.html -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ターミナル検索 | はざいっぽ</title>
+    <link rel="stylesheet" href="/static/css/search_terminal.css">
+    <script src="/static/js/search_terminal.js"></script>
+    <style>
+        /* オーバーレイメッセージのスタイル */
+        #request-success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #request-success-message {
+            background: #fff;
+            padding: 20px 40px;
+            border-radius: 8px;
+            font-size: 1.5em;
+            text-align: center;
+        }
+
+        /* 追加スタイル */
+        .button-group button {
+            margin-right: 10px;
+        }
+
+        .button-group button:last-child {
+            margin-right: 0;
+        }
+
+        #reservation-selection {
+            margin-top: 15px;
+        }
+
+        #reservation-selection select,
+        #reservation-selection button {
+            margin-top: 10px;
+        }
+
+        /* メッセージのスタイル */
+        #favorite-terminal-message,
+        #favorite-lecturer-message,
+        #lecture-request-message {
+            margin-top: 10px;
+            color: green;
+        }
+
+        /* エラーメッセージのスタイル */
+        .error-message {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>ターミナル検索</h1>
+    <main>
+        <!-- ターミナル選択 -->
+        <div class="container box">
+            <section id="terminal-selection">
+                <h2>ターミナル選択</h2>
+                <input type="text" id="terminal-search" placeholder="ターミナルを検索" onkeyup="filterTerminals()">
+                <select id="terminal-list" onchange="toggleTerminalFavoriteButtons()">
+                    <option value="">ターミナルを選択してください</option>
+                    <!-- JavaScriptでフィルタリングされたターミナルリストがここに挿入されます -->
+                </select>
+                <div class="button-group">
+                    <button id="view-schedule" onclick="viewSchedule()">予約可能日程を確認する</button>
+                    <button id="add-favorite-terminal" onclick="addFavoriteTerminal()">お気に入りに設定する</button>
+                    <button id="remove-favorite-terminal" onclick="removeFavoriteTerminal()" style="display:none;">お気に入りから外す</button>
+                </div>
+                <div id="favorite-terminal-message" style="display:none;"></div>
+            </section>
+
+            <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+        </div>
+
+        <!-- レクチャー担当検索 -->
+        <div class="container box">
+            <section id="lecturer-selection">
+                <h2>レクチャー担当検索</h2>
+                <input type="text" id="lecturer-search" placeholder="レクチャー担当を検索" onkeyup="filterLecturers()">
+                <select id="lecturer-list" onchange="toggleLecturerFavoriteButtons()">
+                    <option value="">検索結果を選択</option>
+                    <!-- JavaScriptでフィルタリングされた講師リストがここに挿入されます -->
+                </select>
+                <div class="button-group">
+                    <button id="add-favorite-lecturer" onclick="addFavoriteLecturer()">担当をお気に入りに設定</button>
+                    <button id="remove-favorite-lecturer" onclick="removeFavoriteLecturer()" style="display:none;">担当をお気に入りから外す</button>
+                </div>
+                <div id="favorite-lecturer-message" style="display:none;"></div>
+
+                <!-- 予約日程選択 -->
+                <div id="reservation-selection" style="display:none;">
+                    <h3>予約日程選択</h3>
+                    <select id="reservation-list">
+                        <option value="">予約日程を選択</option>
+                        <!-- JavaScriptでユーザーの予約日程がここに挿入されます -->
+                    </select>
+                    <button onclick="sendLectureRequest()">リクエストを送信する</button>
+                    <div id="lecture-request-message" style="display:none;"></div>
+                </div>
+            </section>
+
+            <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+        </div>
+    </main>
+
+    <!-- リクエスト管理ダイアログなどがあればここに追加 -->
+
+    <!-- リクエスト送信成功時のオーバーレイメッセージ -->
+    <div id="request-success-overlay">
+        <div id="request-success-message">リクエストが送信されました</div>
+    </div>
+
+    <script>
+        function toggleTerminalFavoriteButtons() {
+            const terminalList = document.getElementById('terminal-list');
+            const selectedOption = terminalList.options[terminalList.selectedIndex];
+            const isFavorite = selectedOption.getAttribute('data-is-favorite') === 'true';
+
+            const addFavoriteButton = document.getElementById('add-favorite-terminal');
+            const removeFavoriteButton = document.getElementById('remove-favorite-terminal');
+
+            if (isFavorite) {
+                addFavoriteButton.style.display = 'none';
+                removeFavoriteButton.style.display = 'inline-block';
+            } else {
+                addFavoriteButton.style.display = 'inline-block';
+                removeFavoriteButton.style.display = 'none';
+            }
+        }
+
+        function toggleLecturerFavoriteButtons() {
+            const lecturerList = document.getElementById('lecturer-list');
+            const selectedOption = lecturerList.options[lecturerList.selectedIndex];
+            const isFavorite = selectedOption.getAttribute('data-is-favorite') === 'true';
+
+            const addFavoriteButton = document.getElementById('add-favorite-lecturer');
+            const removeFavoriteButton = document.getElementById('remove-favorite-lecturer');
+
+            if (isFavorite) {
+                addFavoriteButton.style.display = 'none';
+                removeFavoriteButton.style.display = 'inline-block';
+            } else {
+                addFavoriteButton.style.display = 'inline-block';
+                removeFavoriteButton.style.display = 'none';
+            }
+
+            // Show reservation selection if a lecturer is selected
+            const reservationSection = document.getElementById('reservation-selection');
+            if (lecturerList.value) {
+                loadUserReservations();
+                reservationSection.style.display = 'block';
+            } else {
+                reservationSection.style.display = 'none';
+            }
+        }
+
+        function viewSchedule() {
+            const terminalId = document.getElementById('terminal-list').value;
+
+            if (!terminalId) {
+                document.getElementById('favorite-terminal-message').textContent = 'ターミナルを選択してください';
+                document.getElementById('favorite-terminal-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('favorite-terminal-message').style.display = 'none';
+                }, 5000);
+                return;
+            }
+            window.location.href = `/terminal/schedule/${terminalId}`;
+        }
+
+        function addFavoriteTerminal() {
+            const terminalId = document.getElementById('terminal-list').value;
+
+            if (!terminalId) {
+                document.getElementById('favorite-terminal-message').textContent = 'ターミナルを選択してください';
+                document.getElementById('favorite-terminal-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('favorite-terminal-message').style.display = 'none';
+                }, 5000);
+                return;
+            }
+
+            fetch('/terminal/favorite_terminal', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    'terminal_id': terminalId
+                })
+            }).then(response => response.json())
+              .then(data => {
+                  if (data.status === 'success') {
+                      document.getElementById('favorite-terminal-message').textContent = data.message;
+                      document.getElementById('add-favorite-terminal').style.display = 'none';
+                      document.getElementById('remove-favorite-terminal').style.display = 'inline-block';
+                      // Add ★ to the terminal name
+                      const selectedOption = document.getElementById('terminal-list').options[document.getElementById('terminal-list').selectedIndex];
+                      selectedOption.text = `★ ${selectedOption.text.replace(/^★\s*/, '')}`;
+                      selectedOption.setAttribute('data-is-favorite', 'true');
+                  } else {
+                      document.getElementById('favorite-terminal-message').textContent = data.message;
+                  }
+                  document.getElementById('favorite-terminal-message').style.display = 'block';
+                  setTimeout(() => {
+                      document.getElementById('favorite-terminal-message').style.display = 'none';
+                  }, 5000);
+              });
+        }
+
+        function removeFavoriteTerminal() {
+            const terminalId = document.getElementById('terminal-list').value;
+
+            if (!terminalId) {
+                document.getElementById('favorite-terminal-message').textContent = 'ターミナルを選択してください';
+                document.getElementById('favorite-terminal-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('favorite-terminal-message').style.display = 'none';
+                }, 5000);
+                return;
+            }
+
+            fetch('/terminal/unfavorite_terminal', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    'terminal_id': terminalId
+                })
+            }).then(response => response.json())
+              .then(data => {
+                  if (data.status === 'success') {
+                      document.getElementById('favorite-terminal-message').textContent = data.message;
+                      document.getElementById('add-favorite-terminal').style.display = 'inline-block';
+                      document.getElementById('remove-favorite-terminal').style.display = 'none';
+                      // Remove ★ from the terminal name
+                      const selectedOption = document.getElementById('terminal-list').options[document.getElementById('terminal-list').selectedIndex];
+                      selectedOption.text = selectedOption.text.replace(/^★\s*/, '');
+                      selectedOption.setAttribute('data-is-favorite', 'false');
+                  } else {
+                      document.getElementById('favorite-terminal-message').textContent = data.message;
+                  }
+                  document.getElementById('favorite-terminal-message').style.display = 'block';
+                  setTimeout(() => {
+                      document.getElementById('favorite-terminal-message').style.display = 'none';
+                  }, 5000);
+              });
+        }
+
+        function addFavoriteLecturer() {
+            const lecturerId = document.getElementById('lecturer-list').value;
+
+            if (!lecturerId) {
+                document.getElementById('favorite-lecturer-message').textContent = 'レクチャー担当を選択してください';
+                document.getElementById('favorite-lecturer-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('favorite-lecturer-message').style.display = 'none';
+                }, 5000);
+                return;
+            }
+
+            fetch('/terminal/favorite_lecturer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    'lecturer_id': lecturerId
+                })
+            }).then(response => response.json())
+              .then(data => {
+                  if (data.status === 'success') {
+                      document.getElementById('favorite-lecturer-message').textContent = data.message;
+                      document.getElementById('add-favorite-lecturer').style.display = 'none';
+                      document.getElementById('remove-favorite-lecturer').style.display = 'inline-block';
+                      // Add ★ to the lecturer name
+                      const selectedOption = document.getElementById('lecturer-list').options[document.getElementById('lecturer-list').selectedIndex];
+                      selectedOption.text = `★ ${selectedOption.text.replace(/^★\s*/, '')}`;
+                      selectedOption.setAttribute('data-is-favorite', 'true');
+                  } else {
+                      document.getElementById('favorite-lecturer-message').textContent = data.message;
+                  }
+                  document.getElementById('favorite-lecturer-message').style.display = 'block';
+                  setTimeout(() => {
+                      document.getElementById('favorite-lecturer-message').style.display = 'none';
+                  }, 5000);
+              });
+        }
+
+        function removeFavoriteLecturer() {
+            const lecturerId = document.getElementById('lecturer-list').value;
+
+            if (!lecturerId) {
+                document.getElementById('favorite-lecturer-message').textContent = 'レクチャー担当を選択してください';
+                document.getElementById('favorite-lecturer-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('favorite-lecturer-message').style.display = 'none';
+                }, 5000);
+                return;
+            }
+
+            fetch('/terminal/unfavorite_lecturer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    'lecturer_id': lecturerId
+                })
+            }).then(response => response.json())
+              .then(data => {
+                  if (data.status === 'success') {
+                      document.getElementById('favorite-lecturer-message').textContent = data.message;
+                      document.getElementById('add-favorite-lecturer').style.display = 'inline-block';
+                      document.getElementById('remove-favorite-lecturer').style.display = 'none';
+                      // Remove ★ from the lecturer name
+                      const selectedOption = document.getElementById('lecturer-list').options[document.getElementById('lecturer-list').selectedIndex];
+                      selectedOption.text = selectedOption.text.replace(/^★\s*/, '');
+                      selectedOption.setAttribute('data-is-favorite', 'false');
+                  } else {
+                      document.getElementById('favorite-lecturer-message').textContent = data.message;
+                  }
+                  document.getElementById('favorite-lecturer-message').style.display = 'block';
+                  setTimeout(() => {
+                      document.getElementById('favorite-lecturer-message').style.display = 'none';
+                  }, 5000);
+              });
+        }
+
+        function sendLectureRequest() {
+            const lecturerId = document.getElementById('lecturer-list').value;
+            const reservationId = document.getElementById('reservation-list').value;
+
+            if (!lecturerId || !reservationId) {
+                document.getElementById('lecture-request-message').textContent = 'レクチャー担当と予約日程を選択してください。';
+                document.getElementById('lecture-request-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('lecture-request-message').style.display = 'none';
+                }, 5000);
+                return;
+            }
+
+            fetch('/terminal/lecture_request', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    'lecturer_id': lecturerId,
+                    'reservation_id': reservationId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // オーバーレイメッセージを表示
+                    document.getElementById('request-success-overlay').style.display = 'flex';
+                    // 3秒後にリダイレクト
+                    setTimeout(() => {
+                        document.getElementById('request-success-overlay').style.display = 'none';
+                        window.location.href = "{{ url_for('dashboard.dashboard_home') }}";
+                    }, 3000);
+                } else {
+                    document.getElementById('lecture-request-message').textContent = data.message;
+                    document.getElementById('lecture-request-message').style.display = 'block';
+                    setTimeout(() => {
+                        document.getElementById('lecture-request-message').style.display = 'none';
+                    }, 5000);
+                }
+            })
+            .catch(error => {
+                console.error('Error sending lecture request:', error);
+                document.getElementById('lecture-request-message').textContent = 'リクエストの送信中にエラーが発生しました。';
+                document.getElementById('lecture-request-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('lecture-request-message').style.display = 'none';
+                }, 5000);
+            });
+        }
+
+        // リアルタイムでターミナルを検索
+        function filterTerminals() {
+            const searchText = document.getElementById('terminal-search').value.toLowerCase();
+            const terminalList = document.getElementById('terminal-list');
+
+            // 検索クエリが空でもリストを取得
+            fetch(`/terminal/search_terminals?query=${encodeURIComponent(searchText)}`)
+                .then(response => response.json())
+                .then(data => {
+                    terminalList.innerHTML = '<option value="">ターミナルを選択してください</option>'; // 初期プレースホルダーをリセット
+
+                    data.forEach(terminal => {
+                        const option = document.createElement('option');
+                        option.value = terminal.id;
+                        option.text = `${terminal.is_favorite ? '★' : ''} ${terminal.name} (${terminal.prefecture}, ${terminal.city})`;
+                        option.setAttribute('data-is-favorite', terminal.is_favorite);
+                        terminalList.appendChild(option);
+                    });
+
+                    toggleTerminalFavoriteButtons();
+                })
+                .catch(error => {
+                    console.error('Error fetching terminal data:', error);
+                });
+        }
+
+        // リアルタイムで講師を検索
+        function filterLecturers() {
+            const searchText = document.getElementById('lecturer-search').value.toLowerCase();
+            const lecturerList = document.getElementById('lecturer-list');
+
+            // 検索クエリが空の場合は全講師を表示
+            fetch(`/terminal/search_lecturers?query=${encodeURIComponent(searchText)}`)
+                .then(response => response.json())
+                .then(data => {
+                    // リストをクリア
+                    lecturerList.innerHTML = '<option value="">検索結果を選択</option>'; // 初期プレースホルダーをリセット
+
+                    // 講師リストを追加 (contact_nameを使用)
+                    data.forEach(lecturer => {
+                        const option = document.createElement('option');
+                        option.value = lecturer.id;
+                        option.text = `${lecturer.is_favorite ? '★' : ''} ${lecturer.contact_name}`;
+                        option.setAttribute('data-is-favorite', lecturer.is_favorite);
+                        lecturerList.appendChild(option);
+                    });
+
+                    toggleLecturerFavoriteButtons();
+                })
+                .catch(error => {
+                    console.error('Error fetching lecturer data:', error);
+                });
+        }
+
+        // ユーザーの予約日程を取得して表示する関数
+        function loadUserReservations() {
+            const lecturerId = document.getElementById('lecturer-list').value;
+            const reservationSection = document.getElementById('reservation-selection');
+            const reservationList = document.getElementById('reservation-list');
+
+            if (lecturerId) {
+                fetch(`/terminal/user_reservations`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            reservationList.innerHTML = '<option value="">予約日程を選択</option>'; // 初期値をリセット
+                            data.reservations.forEach(reservation => {
+                                const option = document.createElement('option');
+                                option.value = reservation.id;
+                                option.text = `${reservation.date} ${reservation.time_slot}`;
+                                reservationList.appendChild(option);
+                            });
+                            reservationSection.style.display = 'block';
+                        } else {
+                            reservationSection.style.display = 'none';
+                            alert('予約日程の取得に失敗しました。');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching user reservations:', error);
+                        reservationSection.style.display = 'none';
+                    });
+            } else {
+                reservationSection.style.display = 'none';
+            }
+        }
+
+        window.onload = function() {
+            // ターミナルのフィルタリング
+            filterTerminals();
+            const terminalList = document.getElementById('terminal-list');
+            if (terminalList.value) {
+                toggleTerminalFavoriteButtons();
+            }
+            // 講師のフィルタリング
+            filterLecturers();
+            const lecturerList = document.getElementById('lecturer-list');
+            if (lecturerList.value) {
+                toggleLecturerFavoriteButtons();
+            }
+        };
+    </script>
+</body>
+</html>

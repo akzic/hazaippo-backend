@@ -1,0 +1,409 @@
+# app/blueprints/search.py
+
+from flask import Blueprint, render_template, request, flash, current_app, url_for, jsonify
+from flask_login import login_required, current_user
+from app.models import Material, WantedMaterial, User
+from app.forms import MaterialSearchForm, WantedMaterialSearchForm
+from app.blueprints.utils import log_user_activity
+from datetime import datetime, timedelta
+import pytz
+import logging
+
+search_bp = Blueprint('search', __name__)
+JST = pytz.timezone('Asia/Tokyo')
+
+logger = logging.getLogger(__name__)
+
+@search_bp.route('/materials', methods=['GET', 'POST'])
+@login_required
+def search_materials():
+    form = MaterialSearchForm()
+    results = []
+    messages = []
+    categories = []
+    has_results = False  # フラグの初期化
+
+    if request.method == 'GET':
+        if current_user.prefecture:
+            form.m_prefecture.data = current_user.prefecture
+
+    if form.validate_on_submit():
+        # ベースクエリに明示的な結合を追加
+        query = Material.query.join(User, Material.user_id == User.id)
+
+        # 自分自身が登録した材料を除外
+        query = query.filter(Material.user_id != current_user.id)
+        logger.debug(f"フィルタ: 除外 user_id={current_user.id}")
+
+        # フィルタリングロジック
+        if form.material_type.data:
+            query = query.filter(Material.type == form.material_type.data)
+            logger.debug(f"フィルタ: type={form.material_type.data}")
+
+        if form.material_type.data == '木材' and form.wood_type.data:
+            query = query.filter(Material.wood_type == form.wood_type.data)
+            logger.debug(f"フィルタ: wood_type={form.wood_type.data}")
+
+        if form.material_type.data == 'ボード材' and form.board_material_type.data:
+            query = query.filter(Material.board_material_type == form.board_material_type.data)
+            logger.debug(f"フィルタ: board_material_type={form.board_material_type.data}")
+
+        if form.material_type.data == 'パネル材' and form.panel_type.data:
+            query = query.filter(Material.panel_type == form.panel_type.data)
+            logger.debug(f"フィルタ: panel_type={form.panel_type.data}")
+
+        if form.material_size_1.data:
+            query = query.filter(Material.size_1 >= form.material_size_1.data)
+            logger.debug(f"フィルタ: size_1 >= {form.material_size_1.data}")
+        if form.material_size_2.data:
+            query = query.filter(Material.size_2 >= form.material_size_2.data)
+            logger.debug(f"フィルタ: size_2 >= {form.material_size_2.data}")
+        if form.material_size_3.data:
+            query = query.filter(Material.size_3 >= form.material_size_3.data)
+            logger.debug(f"フィルタ: size_3 >= {form.material_size_3.data}")
+
+        if form.m_prefecture.data:
+            query = query.filter(Material.m_prefecture == form.m_prefecture.data)
+            logger.debug(f"フィルタ: m_prefecture={form.m_prefecture.data}")
+
+        if form.m_city.data:
+            query = query.filter(Material.m_city.ilike(f"%{form.m_city.data}%"))
+            logger.debug(f"フィルタ: m_city ilike % {form.m_city.data} %")
+
+        query = query.filter(Material.matched == False, Material.deadline >= datetime.now())
+        logger.debug("フィルタ: matched=False and deadline >= current_time")
+
+        # business_structure が 0 または 1 の場合、同じ company_name を持つユーザーの材料を除外
+        if current_user.business_structure in [0, 1]:
+            query = query.filter(User.company_name != current_user.company_name)
+            logger.debug(f"フィルタ: company_name != {current_user.company_name} (business_structure={current_user.business_structure})")
+
+        results = query.all()
+
+        logger.debug(f"実行されたクエリ: {str(query)}")
+        logger.debug(f"検索結果数: {len(results)}")
+
+        if results:
+            has_results = True  # 結果がある場合はフラグをTrueに設定
+        else:
+            flash("検索結果が見つかりませんでした。", "info")
+            messages.append("検索結果が見つかりませんでした。")
+            categories.append("info")
+
+    else:
+        if request.method == 'POST':
+            logger.debug("フォームのバリデーションに失敗しました。")
+            logger.debug(f"フォームエラー: {form.errors}")
+            # フォームの各フィールドのエラーメッセージを収集
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.append(error)
+                    categories.append("error")
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # AJAXリクエストの場合、検索結果とメッセージを返す
+        return jsonify({
+            'html': render_template('partials/search_results.html', results=results),
+            'messages': messages,
+            'categories': categories,
+            'has_results': has_results  # フラグを追加
+        })
+    else:
+        # 通常のリクエストの場合、フルページを返す
+        google_maps_api_key = current_app.config['GOOGLE_API_KEY']
+        return render_template('search.html', material_form=form, results=results, GOOGLE_API_KEY=google_maps_api_key)
+
+
+@search_bp.route("/search_materials_results", methods=['POST'])
+@login_required
+def search_materials_results():
+    material_form = MaterialSearchForm()
+    results = []
+    messages = []
+    categories = []
+    has_results = False  # フラグの初期化
+
+    if material_form.validate_on_submit():
+        material_type = material_form.material_type.data
+        size_1 = material_form.material_size_1.data or 0.0
+        size_2 = material_form.material_size_2.data or 0.0
+        size_3 = material_form.material_size_3.data or 0.0
+        m_prefecture = material_form.m_prefecture.data
+        m_city = material_form.m_city.data.strip() if material_form.m_city.data else ""
+
+        # 現在の日付を取得して1日引く
+        current_date = (datetime.now(JST) - timedelta(days=1)).date()
+
+        # ベースクエリに明示的な結合を追加
+        query = Material.query.join(User, Material.user_id == User.id).filter(
+            Material.type == material_type,
+            Material.m_prefecture == m_prefecture,
+            Material.m_city.ilike(f"%{m_city}%") if m_city else True,
+            Material.size_1 >= size_1,
+            Material.size_2 >= size_2,
+            Material.size_3 >= size_3,
+            Material.matched == False,
+            Material.deadline >= current_date  # 締め切り日が現在の日付以上
+        )
+
+        # 自分自身が登録した材料を除外
+        query = query.filter(Material.user_id != current_user.id)
+        logger.debug(f"フィルタ: 除外 user_id={current_user.id}")
+
+        # business_structure が 0 または 1 の場合、同じ company_name を持つユーザーの材料を除外
+        if current_user.business_structure in [0, 1]:
+            query = query.filter(User.company_name != current_user.company_name)
+            logger.debug(f"フィルタ: company_name != {current_user.company_name} (business_structure={current_user.business_structure})")
+
+        # クエリを実行して結果を取得
+        results = query.all()
+
+        logger.debug(f"検索結果数: {len(results)}")
+
+        if results:
+            has_results = True  # 結果がある場合はフラグをTrueに設定
+        else:
+            flash("検索結果が見つかりませんでした。", "info")
+            messages.append("検索結果が見つかりませんでした。")
+            categories.append("info")
+
+    else:
+        logger.debug("フォームのバリデーションに失敗しました。")
+        logger.debug(f"フォームエラー: {material_form.errors}")
+        # フォームの各フィールドのエラーメッセージを収集
+        for field, errors in material_form.errors.items():
+            for error in errors:
+                messages.append(error)
+                categories.append("error")
+
+    log_user_activity(
+        current_user.id,
+        '材料検索結果表示',
+        'ユーザーが材料検索結果を表示しました。',
+        request.remote_addr,
+        request.user_agent.string,
+        'N/A'
+    )
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # AJAXリクエストの場合、検索結果とメッセージを返す
+        return jsonify({
+            'html': render_template('partials/search_results.html', results=results),
+            'messages': messages,
+            'categories': categories,
+            'has_results': has_results  # フラグを追加
+        })
+    else:
+        # 通常のリクエストの場合、フルページを返す
+        return render_template('partials/search_results.html', results=results)
+
+
+@search_bp.route("/search_wanted", methods=['GET', 'POST'])
+@login_required
+def search_wanted_materials():
+    search_form = WantedMaterialSearchForm()
+    results = []
+    messages = []
+    categories = []
+    has_results = False
+
+    if request.method == 'POST' and search_form.validate_on_submit():
+        material_type = search_form.material_type.data
+        size_1 = search_form.material_size_1.data or 0.0
+        size_2 = search_form.material_size_2.data or 0.0
+        size_3 = search_form.material_size_3.data or 0.0
+        location_prefecture = search_form.location.data
+        m_city = search_form.m_city.data.strip() if search_form.m_city.data else ""
+        wood_type = search_form.wood_type.data
+        board_material_type = search_form.board_material_type.data
+        panel_type = search_form.panel_type.data
+
+        # 現在の日付を取得して1日引く
+        current_date = (datetime.now(JST) - timedelta(days=1)).date()
+
+        # ベースクエリに明示的な結合を追加
+        query = WantedMaterial.query.join(User, WantedMaterial.user_id == User.id)
+
+        # 自分自身が登録した欲しい材料を除外
+        query = query.filter(WantedMaterial.user_id != current_user.id)
+        logger.debug(f"フィルタ: 除外 user_id={current_user.id}")
+
+        # フィルタ条件を段階的に追加
+        if material_type:
+            query = query.filter(WantedMaterial.type == material_type)
+
+            # サブタイプによるフィルタリング
+            if material_type == "木材" and wood_type:
+                query = query.filter(WantedMaterial.wood_type == wood_type)
+            elif material_type == "ボード材" and board_material_type:
+                query = query.filter(WantedMaterial.board_material_type == board_material_type)
+            elif material_type == "パネル材" and panel_type:
+                query = query.filter(WantedMaterial.panel_type == panel_type)
+
+        if m_city:
+            query = query.filter(WantedMaterial.wm_city.ilike(f"%{m_city}%"))
+
+        # サイズ条件: いずれかのサイズが指定以上
+        query = query.filter(
+            (WantedMaterial.size_1 >= size_1) |
+            (WantedMaterial.size_2 >= size_2) |
+            (WantedMaterial.size_3 >= size_3)
+        )
+
+        # その他の条件
+        query = query.filter(
+            WantedMaterial.matched == False,
+            WantedMaterial.deadline >= current_date  # 締め切り日が現在の日付以上
+        )
+
+        # location_prefectureが指定されている場合、Userと結合してフィルタリング
+        if location_prefecture:
+            query = query.filter(User.prefecture == location_prefecture)
+
+        # business_structure が 0 または 1 の場合、同じ company_name を持つユーザーの欲しい材料を除外
+        if current_user.business_structure in [0, 1]:
+            query = query.filter(User.company_name != current_user.company_name)
+            logger.debug(f"フィルタ: company_name != {current_user.company_name} (business_structure={current_user.business_structure})")
+
+        # クエリを実行して結果を取得
+        results = query.all()
+
+        logging.debug(f"検索結果数: {len(results)}")
+        logging.debug(f"実行中のクエリ: {str(query.statement.compile(compile_kwargs={'literal_binds': True}))}")
+
+        if results:
+            has_results = True
+        else:
+            flash("検索結果が見つかりませんでした。", "info")
+            messages.append("検索結果が見つかりませんでした。")
+            categories.append("info")
+
+    # GETリクエストの場合、デフォルトで現在のユーザーのprefectureを設定
+    if request.method == 'GET' and current_user.is_authenticated:
+        search_form.location.default = current_user.prefecture
+        search_form.process()
+
+    # ユーザーアクティビティのログ記録
+    log_user_activity(
+        current_user.id,
+        '欲しい材料検索',
+        'ユーザーが欲しい材料を検索しました。',
+        request.remote_addr,
+        request.user_agent.string,
+        'N/A'
+    )
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # AJAXリクエストの場合、検索結果とメッセージを返す
+        return jsonify({
+            'html': render_template('partials/search_wanted_results.html', results=results),
+            'messages': messages,
+            'categories': categories,
+            'has_results': has_results
+        })
+    else:
+        # 通常のリクエストの場合、フルページを返す
+        return render_template('search_wanted.html', wanted_material_search_form=search_form, results=results)
+
+
+@search_bp.route("/search_wanted_results", methods=['POST'])
+@login_required
+def search_wanted_materials_results():
+    search_form = WantedMaterialSearchForm()
+    results = []
+    messages = []
+    categories = []
+    has_results = False  # フラグの初期化
+
+    if search_form.validate_on_submit():
+        material_type = search_form.material_type.data
+        size_1 = search_form.material_size_1.data or 0.0
+        size_2 = search_form.material_size_2.data or 0.0
+        size_3 = search_form.material_size_3.data or 0.0
+        location_prefecture = search_form.location.data
+        m_city = search_form.m_city.data.strip() if search_form.m_city.data else ""
+        wood_type = search_form.wood_type.data
+        board_material_type = search_form.board_material_type.data
+        panel_type = search_form.panel_type.data
+
+        # 現在の日付を取得して1日引く
+        current_date = (datetime.now(JST) - timedelta(days=1)).date()
+
+        # ベースクエリに明示的な結合を追加
+        query = WantedMaterial.query.join(User, WantedMaterial.user_id == User.id)
+
+        # 自分自身が登録した欲しい材料を除外
+        query = query.filter(WantedMaterial.user_id != current_user.id)
+        logger.debug(f"フィルタ: 除外 user_id={current_user.id}")
+
+        # フィルタ条件を段階的に追加
+        if material_type:
+            query = query.filter(WantedMaterial.type == material_type)
+
+            # サブタイプによるフィルタリング
+            if material_type == "木材" and wood_type:
+                query = query.filter(WantedMaterial.wood_type == wood_type)
+            elif material_type == "ボード材" and board_material_type:
+                query = query.filter(WantedMaterial.board_material_type == board_material_type)
+            elif material_type == "パネル材" and panel_type:
+                query = query.filter(WantedMaterial.panel_type == panel_type)
+
+        if m_city:
+            query = query.filter(WantedMaterial.wm_city.ilike(f"%{m_city}%"))
+
+        # サイズ条件: いずれかのサイズが指定以上
+        query = query.filter(
+            (WantedMaterial.size_1 >= size_1) |
+            (WantedMaterial.size_2 >= size_2) |
+            (WantedMaterial.size_3 >= size_3)
+        )
+
+        # その他の条件
+        query = query.filter(
+            WantedMaterial.matched == False,
+            WantedMaterial.deadline >= current_date  # 締め切り日が現在の日付以上
+        )
+
+        # location_prefectureが指定されている場合、Userと結合してフィルタリング
+        if location_prefecture:
+            query = query.filter(User.prefecture == location_prefecture)
+
+        # business_structure が 0 または 1 の場合、同じ company_name を持つユーザーの欲しい材料を除外
+        if current_user.business_structure in [0, 1]:
+            query = query.filter(User.company_name != current_user.company_name)
+            logger.debug(f"フィルタ: company_name != {current_user.company_name} (business_structure={current_user.business_structure})")
+
+        # クエリを実行して結果を取得
+        results = query.all()
+
+        logging.debug(f"検索結果数: {len(results)}")
+        logging.debug(f"実行中のクエリ: {str(query.statement.compile(compile_kwargs={'literal_binds': True}))}")
+
+        if results:
+            has_results = True
+        else:
+            flash("検索結果が見つかりませんでした。", "info")
+            messages.append("検索結果が見つかりませんでした。")
+            categories.append("info")
+
+    # ユーザーアクティビティのログ記録
+    log_user_activity(
+        current_user.id,
+        '希望材料検索結果表示',
+        'ユーザーが希望材料検索結果を表示しました。',
+        request.remote_addr,
+        request.user_agent.string,
+        'N/A'
+    )
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # AJAXリクエストの場合、検索結果とメッセージを返す
+        return jsonify({
+            'html': render_template('partials/search_wanted_results.html', results=results),
+            'messages': messages,
+            'categories': categories,
+            'has_results': has_results
+        })
+    else:
+        # 通常のリクエストの場合、フルページを返す
+        return render_template('partials/search_wanted_results.html', results=results)

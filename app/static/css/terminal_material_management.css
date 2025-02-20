@@ -1,0 +1,92 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #4db995; /* 見出しの色 */
+}
+
+h2 {
+    font-size: 20px;
+    margin-bottom: 10px;
+    color: #4db995; /* セクション見出しの色 */
+}
+
+section {
+    margin-bottom: 20px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 10px;
+    text-align: center;
+}
+
+th {
+    background-color: #f9f9f9;
+    color: #333;
+}
+
+td {
+    background-color: #fff;
+}
+
+button {
+    background-color: #d66a35; /* 在庫管理ボタンの色 */
+    color: white;
+    border: none;
+    padding: 10px;
+    width: 100px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #b45628; /* ボタンホバー時の色 */
+}
+
+.back-button {
+    display: inline-block;
+    background-color: #6c757d; /* 戻るボタンの色 */
+    color: white;
+    text-align: center;
+    padding: 10px;
+    width: 100px;
+    height: 26px; /* ボタンの高さ */
+    line-height: 26px;
+    border-radius: 5px;
+    text-decoration: none;
+}
+
+.back-button:hover {
+    background-color: #5a6268; /* 戻るボタンホバー時の色 */
+}
+
+@media (max-width: 600px) {
+    h1, h2 {
+        font-size: 18px;
+    }
+
+    th, td {
+        padding: 5px;
+    }
+
+    button, .back-button {
+        width: 80px;
+        padding: 8px;
+    }
+}

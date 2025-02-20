@@ -1,0 +1,155 @@
+<!-- app/templates/terminal_reservation_management.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ターミナル予約管理 | はざいっぽ</title>
+    <link rel="stylesheet" href="/static/css/terminal_reservation_management.css">
+    <script src="/static/js/terminal_reservation_management.js"></script>
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>ターミナル予約管理</h1>
+    <main>
+        <!-- 部屋選択 -->
+        <section id="room-selection">
+            <h2>部屋選択</h2>
+            <select id="room-list" onchange="updateSchedule()">
+                {% for room in rooms %}
+                    <option value="{{ room.id }}">{{ room.room_number }}</option>
+                {% endfor %}
+            </select>
+        </section>
+
+        <!-- 日程選択 -->
+        <section id="date-selection-section">
+            <h2>日程選択</h2>
+            <input type="date" id="date-list" onchange="updateSchedule()" min="{{ min_date }}" max="{{ max_date }}" value="{{ today.strftime('%Y-%m-%d') }}">
+        </section>
+
+        <!-- 予約状況の表示 -->
+        <section id="schedule-display">
+            <h2>予約状況</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>時間</th>
+                        <th>予約者名</th>
+                        <th>レクチャー担当者名</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="schedule-table">
+                    <!-- 9:00 ~ 23:00 のように1時間毎に13時間分を表示 -->
+                    {% for slot in schedule %}
+                        <tr>
+                            <td>{{ slot.time }}</td>
+                            <td>{{ slot.user_name or '未予約' }}</td>
+                            <td>{{ slot.lecturer_name or 'レクチャー担当なし' }}</td>
+                            <td>
+                                {% if slot.reservation_id %}
+                                    <button class="delete-button" data-reservation-id="{{ slot.reservation_id }}">削除</button>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            updateSchedule();
+
+            // Add event listeners to delete buttons
+            document.getElementById('schedule-table').addEventListener('click', function(event) {
+                if (event.target && event.target.classList.contains('delete-button')) {
+                    const reservationId = event.target.getAttribute('data-reservation-id');
+                    if (confirm('この予約を削除してもよろしいですか？')) {
+                        deleteReservation(reservationId);
+                    }
+                }
+            });
+        });
+
+        function updateSchedule() {
+            const selectedRoom = document.getElementById('room-list').value;
+            const selectedDate = document.getElementById('date-list').value;
+
+            fetch(`/terminal_management/get_schedule?room_id=${selectedRoom}&date=${selectedDate}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        const scheduleTable = document.getElementById('schedule-table');
+                        scheduleTable.innerHTML = ''; // Clear existing rows
+
+                        data.schedule.forEach(slot => {
+                            const tr = document.createElement('tr');
+
+                            const tdTime = document.createElement('td');
+                            tdTime.textContent = slot.time;
+                            tr.appendChild(tdTime);
+
+                            const tdUser = document.createElement('td');
+                            tdUser.textContent = slot.user_name || '未予約';
+                            tr.appendChild(tdUser);
+
+                            const tdLecturer = document.createElement('td');
+                            tdLecturer.textContent = slot.lecturer_name || 'レクチャー担当なし';
+                            tr.appendChild(tdLecturer);
+
+                            const tdOperation = document.createElement('td');
+                            if (slot.reservation_id) {
+                                const deleteButton = document.createElement('button');
+                                deleteButton.textContent = '削除';
+                                deleteButton.classList.add('delete-button');
+                                deleteButton.setAttribute('data-reservation-id', slot.reservation_id);
+                                tdOperation.appendChild(deleteButton);
+                            } else {
+                                tdOperation.textContent = '-';
+                            }
+                            tr.appendChild(tdOperation);
+
+                            scheduleTable.appendChild(tr);
+                        });
+                    } else {
+                        alert('スケジュールの取得に失敗しました。');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching schedule:', error);
+                    alert('スケジュールの取得中にエラーが発生しました。');
+                });
+        }
+
+        function deleteReservation(reservationId) {
+            fetch(`/terminal_management/delete_reservation/${reservationId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('予約が削除されました。');
+                    updateSchedule();
+                } else {
+                    alert(data.message || '予約の削除に失敗しました。');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting reservation:', error);
+                alert('予約の削除中にエラーが発生しました。');
+            });
+        }
+    </script>
+</body>
+</html>

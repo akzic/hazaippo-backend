@@ -1,0 +1,348 @@
+<!-- templates/material_list.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>提供端材一覧 - はざいっぽ</title>
+    <!-- 専用のCSSファイルをリンク -->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/material_list.css') }}">
+    <!-- CSRFトークン -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <!-- Bootstrap CSS (必要に応じてコメントを外してください) -->
+    <!-- <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"> -->
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="content">
+        <h1>提供端材一覧</h1>
+
+        <div class="button-group">
+            <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+        </div>
+
+        <!-- タブヘッダー -->
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'Unmatched')">マッチしていない端材</button>
+            <button class="tablinks" onclick="openTab(event, 'MatchedUncompleted')">マッチしているが未完了の端材</button>
+            <button class="tablinks" onclick="openTab(event, 'Completed')">完了済みの端材</button>
+        </div>
+
+        <!-- マッチしていない端材 タブコンテンツ -->
+        <div id="Unmatched" class="tabcontent" style="display: block;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>材種</th>
+                        {% if current_user.business_structure in [0, 1] %}
+                            <th>登録者</th>
+                        {% endif %}
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <th>場所</th>
+                        <th>登録日</th>
+                        <th>締切日</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for material in unmatched_materials %}
+                    <tr data-material-id="{{ material.id }}" data-deadline="{{ material.deadline.isoformat() if material.deadline else '' }}">
+                        <td class="type">{{ material.type }}</td>
+                        <td class="category">
+                            {% if material.type == "木材" %}
+                                {{ material.wood_type if material.wood_type != "N/A" else "" }}
+                            {% elif material.type == "ボード材" %}
+                                {{ material.board_material_type if material.board_material_type != "N/A" else "" }}
+                            {% elif material.type == "パネル材" %}
+                                {{ material.panel_type if material.panel_type != "N/A" else "" }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        {% if current_user.business_structure in [0, 1] %}
+                            <td class="registrant">
+                                {% if material.owner and material.owner.contact_name %}
+                                    {{ material.owner.contact_name }}
+                                {% else %}
+                                    <!-- 空白にする -->
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                        <td class="quantity">{{ material.quantity }}</td>
+                        <td class="size">
+                            {% if material.size_1 == 0.0 and material.size_2 == 0.0 and material.size_3 == 0.0 %}
+                                指定なし
+                            {% else %}
+                                {{ material.size_1 }} × {{ material.size_2 }} × {{ material.size_3 }}
+                            {% endif %}
+                        </td>
+                        <td class="location">
+                            {{ (material.m_prefecture | default('')) ~ ' ' ~ (material.m_city | default('')) ~ ' ' ~ (material.m_address | default('')) | trim }}
+                        </td>
+                        <td class="created_at">{{ material.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="deadline">
+                            {{ material.deadline.strftime('%Y-%m-%d %H:%M:%S') if material.deadline else '未設定' }}
+                        </td>
+                        <td class="note">
+                            {% if material.note != "N/A" %}
+                                {{ material.note }}
+                            {% else %}
+                                <!-- 空白にする -->
+                            {% endif %}
+                        </td>
+                        <td class="action-buttons">
+                            {% if current_user.business_structure in [0, 1] %}
+                                {% set owner = material.owner %}
+                                {% if owner and current_user.company_name == owner.company_name and 
+                                      current_user.prefecture == owner.prefecture and
+                                      current_user.city == owner.city and
+                                      current_user.address == owner.address %}
+                                    <button class="edit-button btn btn-primary" onclick="editRow(this)">編集</button>
+                                    
+                                    <!-- 削除フォーム -->
+                                    <form class="delete-form" data-material-id="{{ material.id }}" action="{{ url_for('materials.delete_material_ajax', material_id=material.id) }}" method="POST" style="display:inline;">
+                                        {{ delete_form.hidden_tag() }}
+                                        <button type="submit" class="btn btn-danger">削除</button>
+                                    </form>
+                                {% endif %}
+                            {% elif current_user.business_structure == 2 %}
+                                {% if current_user.id == material.user_id %}
+                                    <button class="edit-button btn btn-primary" onclick="editRow(this)">編集</button>
+                                    
+                                    <!-- 削除フォーム -->
+                                    <form class="delete-form" data-material-id="{{ material.id }}" action="{{ url_for('materials.delete_material_ajax', material_id=material.id) }}" method="POST" style="display:inline;">
+                                        {{ delete_form.hidden_tag() }}
+                                        <button type="submit" class="btn btn-danger">削除</button>
+                                    </form>
+                                {% endif %}
+                            {% else %}
+                                {% if material.owner and current_user.company_name == material.owner.company_name %}
+                                    <button class="edit-button btn btn-primary" onclick="editRow(this)">編集</button>
+                                    
+                                    <!-- 削除フォーム -->
+                                    <form class="delete-form" data-material-id="{{ material.id }}" action="{{ url_for('materials.delete_material_ajax', material_id=material.id) }}" method="POST" style="display:inline;">
+                                        {{ delete_form.hidden_tag() }}
+                                        <button type="submit" class="btn btn-danger">削除</button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if current_user.business_structure in [0, 1] %}10{% else %}9{% endif %}" style="text-align:center;">データがありません。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- マッチしているが未完了の端材 タブコンテンツ -->
+        <div id="MatchedUncompleted" class="tabcontent">
+            <table>
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>材種</th>
+                        {% if current_user.business_structure in [0, 1] %}
+                            <th>登録者</th>
+                        {% endif %}
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <th>場所</th>
+                        <th>登録日</th>
+                        <th>締切日</th>
+                        <th>備考</th>
+                        <!-- 操作列を削除 -->
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for material in matched_uncompleted_materials %}
+                    <tr data-material-id="{{ material.id }}" data-deadline="{{ material.deadline.isoformat() if material.deadline else '' }}">
+                        <td class="type">{{ material.type }}</td>
+                        <td class="category">
+                            {% if material.type == "木材" %}
+                                {{ material.wood_type if material.wood_type != "N/A" else "" }}
+                            {% elif material.type == "ボード材" %}
+                                {{ material.board_material_type if material.board_material_type != "N/A" else "" }}
+                            {% elif material.type == "パネル材" %}
+                                {{ material.panel_type if material.panel_type != "N/A" else "" }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        {% if current_user.business_structure in [0, 1] %}
+                            <td class="registrant">
+                                {% if material.owner and material.owner.contact_name %}
+                                    {{ material.owner.contact_name }}
+                                {% else %}
+                                    <!-- 空白にする -->
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                        <td class="quantity">{{ material.quantity }}</td>
+                        <td class="size">
+                            {% if material.size_1 == 0.0 and material.size_2 == 0.0 and material.size_3 == 0.0 %}
+                                指定なし
+                            {% else %}
+                                {{ material.size_1 }} × {{ material.size_2 }} × {{ material.size_3 }}
+                            {% endif %}
+                        </td>
+                        <td class="location">
+                            {{ (material.m_prefecture | default('')) ~ ' ' ~ (material.m_city | default('')) ~ ' ' ~ (material.m_address | default('')) | trim }}
+                        </td>
+                        <td class="created_at">{{ material.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="deadline">
+                            {{ material.deadline.strftime('%Y-%m-%d %H:%M:%S') if material.deadline else '未設定' }}
+                        </td>
+                        <td class="note">
+                            {% if material.note != "N/A" %}
+                                {{ material.note }}
+                            {% else %}
+                                <!-- 空白にする -->
+                            {% endif %}
+                        </td>
+                        <!-- 操作列を削除 -->
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if current_user.business_structure in [0, 1] %}9{% else %}8{% endif %}" style="text-align:center;">データがありません。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 完了済みの端材 タブコンテンツ -->
+        <div id="Completed" class="tabcontent">
+            <table>
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>材種</th>
+                        {% if current_user.business_structure in [0, 1] %}
+                            <th>登録者</th>
+                        {% endif %}
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <th>場所</th>
+                        <th>登録日</th>
+                        <th>締切日</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for material in completed_materials %}
+                    <tr data-material-id="{{ material.id }}" data-deadline="{{ material.deadline.isoformat() if material.deadline else '' }}">
+                        <td class="type">{{ material.type }}</td>
+                        <td class="category">
+                            {% if material.type == "木材" %}
+                                {{ material.wood_type if material.wood_type != "N/A" else "" }}
+                            {% elif material.type == "ボード材" %}
+                                {{ material.board_material_type if material.board_material_type != "N/A" else "" }}
+                            {% elif material.type == "パネル材" %}
+                                {{ material.panel_type if material.panel_type != "N/A" else "" }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        {% if current_user.business_structure in [0, 1] %}
+                            <td class="registrant">
+                                {% if material.owner and material.owner.contact_name %}
+                                    {{ material.owner.contact_name }}
+                                {% else %}
+                                    <!-- 空白にする -->
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                        <td class="quantity">{{ material.quantity }}</td>
+                        <td class="size">
+                            {% if material.size_1 == 0.0 and material.size_2 == 0.0 and material.size_3 == 0.0 %}
+                                指定なし
+                            {% else %}
+                                {{ material.size_1 }} × {{ material.size_2 }} × {{ material.size_3 }}
+                            {% endif %}
+                        </td>
+                        <td class="location">
+                            {{ (material.m_prefecture | default('')) ~ ' ' ~ (material.m_city | default('')) ~ ' ' ~ (material.m_address | default('')) | trim }}
+                        </td>
+                        <td class="created_at">{{ material.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="deadline">
+                            {{ material.deadline.strftime('%Y-%m-%d %H:%M:%S') if material.deadline else '未設定' }}
+                        </td>
+                        <td class="note">
+                            {% if material.note != "N/A" %}
+                                {{ material.note }}
+                            {% else %}
+                                <!-- 空白にする -->
+                            {% endif %}
+                        </td>
+                        <td class="action-buttons">
+                            {% if current_user.business_structure in [0, 1] %}
+                                {% set owner = material.owner %}
+                                {% if owner and current_user.company_name == owner.company_name and 
+                                      current_user.prefecture == owner.prefecture and
+                                      current_user.city == owner.city and
+                                      current_user.address == owner.address %}
+                                    <!-- 履歴削除ボタンのみ -->
+                                    <!-- 履歴削除フォーム -->
+                                    <form class="delete-history-form" data-material-id="{{ material.id }}" action="{{ url_for('materials.delete_history_material', material_id=material.id) }}" method="POST" style="display:inline;">
+                                        {{ delete_form.hidden_tag() }}
+                                        <button type="submit" class="btn btn-warning">履歴削除</button>
+                                    </form>
+                                {% endif %}
+                            {% elif current_user.business_structure == 2 %}
+                                {% if current_user.id == material.user_id %}
+                                    <!-- 履歴削除フォーム -->
+                                    <form class="delete-history-form" data-material-id="{{ material.id }}" action="{{ url_for('materials.delete_history_material', material_id=material.id) }}" method="POST" style="display:inline;">
+                                        {{ delete_form.hidden_tag() }}
+                                        <button type="submit" class="btn btn-warning">履歴削除</button>
+                                    </form>
+                                {% endif %}
+                            {% else %}
+                                {% if material.owner and current_user.company_name == material.owner.company_name %}
+                                    <!-- 履歴削除フォーム -->
+                                    <form class="delete-history-form" data-material-id="{{ material.id }}" action="{{ url_for('materials.delete_history_material', material_id=material.id) }}" method="POST" style="display:inline;">
+                                        {{ delete_form.hidden_tag() }}
+                                        <button type="submit" class="btn btn-warning">履歴削除</button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if current_user.business_structure in [0, 1] %}10{% else %}9{% endif %}" style="text-align:center;">データがありません。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- モーダル -->
+    <div id="deadlineModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <p>締切日を過ぎている端材が存在します。締切日を変更するか、端材を削除してください。</p>
+        </div>
+    </div>
+
+    <!-- ロードインジケーター -->
+    <div id="loading-indicator">
+        <p>処理中...</p>
+    </div>
+
+    <!-- JavaScriptファイルをリンク -->
+    <script src="{{ url_for('static', filename='js/material_list.js') }}"></script>
+    <!-- Bootstrap JS and dependencies (必要に応じてコメントを外してください) -->
+    <!--
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    -->
+</body>
+</html>

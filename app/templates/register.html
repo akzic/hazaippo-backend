@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>新規ユーザー登録 - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/register.css') }}">
+</head>
+<body>
+    <h1>新規ユーザー登録</h1>
+    
+    <!-- フラッシュメッセージの表示 -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    
+    <form id="registerForm" method="POST" action="{{ url_for('auth.register') }}">
+        {{ form.hidden_tag() }}
+        
+        <div>
+            <label for="business_structure">登録形態</label>
+            {{ form.business_structure(id="business_structure") }}
+            {% if form.business_structure.errors %}
+                <span class="error-message">{{ form.business_structure.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 統一された company_name フィールド -->
+        <div id="companyNameDiv">
+            <label for="company_name" id="companyNameLabel">法人名/屋号/ニックネーム</label>
+            {{ form.company_name(id="company_name", size=32) }}
+            {% if form.company_name.errors %}
+                <span class="error-message">{{ form.company_name.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 会社電話番号 -->
+        <div id="companyPhoneDiv" style="display: none;">
+            <label for="company_phone">代表電話番号</label>
+            {{ form.company_phone(id="company_phone", size=20) }}
+            {% if form.company_phone.errors %}
+                <span class="error-message">{{ form.company_phone.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 氏名 -->
+        <div id="contactNameDiv">
+            <label for="contact_name" id="contactNameLabel">担当者名</label>
+            {{ form.contact_name(id="contact_name", size=32) }}
+            {% if form.contact_name.errors %}
+                <span class="error-message">{{ form.contact_name.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 個人用電話番号 -->
+        <div id="individualPhoneDiv" style="display: none;">
+            <label for="individual_phone">電話番号</label>
+            {{ form.individual_phone(id="individual_phone", size=20) }}
+            {% if form.individual_phone.errors %}
+                <span class="error-message">{{ form.individual_phone.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 担当者電話番号 -->
+        <div id="contactPhoneDiv" style="display: none;">
+            <label for="contact_phone" id="contactPhoneLabel">担当者電話番号</label>
+            {{ form.contact_phone(id="contact_phone", size=20) }}
+            {% if form.contact_phone.errors %}
+                <span class="error-message">{{ form.contact_phone.errors[0] }}</span>
+            {% endif %}
+        </div>
+        
+        <!-- その他のフィールドはそのまま -->
+
+        <div id="prefectureDiv">
+            <label for="prefecture">住所</label>
+            {{ form.prefecture(id="prefecture") }}
+            {% if form.prefecture.errors %}
+                <span class="error-message">{{ form.prefecture.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <div id="cityDiv">
+            <label for="city">市区町村</label>
+            {{ form.city(id="city", size=32) }}
+            {% if form.city.errors %}
+                <span class="error-message">{{ form.city.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <div id="addressDiv">
+            <label for="address">それ以降の住所</label>
+            {{ form.address(id="address", size=64) }}
+            {% if form.address.errors %}
+                <span class="error-message">{{ form.address.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 業種 -->
+        <div id="industryDiv">
+            <label for="industry" id="industryLabel">業種</label>
+            {{ form.industry(id="industry") }}
+            {% if form.industry.errors %}
+                <span class="error-message">{{ form.industry.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 職種 -->
+        <div id="jobTitleDiv">
+            <label for="job_title" id="jobTitleLabel">職種</label>
+            {{ form.job_title(id="job_title") }}
+            {% if form.job_title.errors %}
+                <span class="error-message">{{ form.job_title.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 取引時のサポート (Checkbox first) -->
+        <div class="trading-desk-group" id="tradingDeskDiv">
+            {{ form.without_approval(id="without_approval") }}
+            <label for="without_approval">リクエスト受け取り時、承認をスキップする</label>
+            {% if form.without_approval.errors %}
+                <span class="error-message">{{ form.without_approval.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- メールアドレス -->
+        <div id="emailDiv">
+            <label for="contact_email" id="emailLabel">メールアドレス</label>
+            {{ form.contact_email(id="contact_email", size=64) }}
+            {% if form.contact_email.errors %}
+                <span class="error-message">{{ form.contact_email.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- パスワード -->
+        <div id="passwordDiv">
+            <label for="password">パスワード</label>
+            {{ form.password(id="password", size=32) }}
+            {% if form.password.errors %}
+                <span class="error-message">{{ form.password.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- パスワード確認 -->
+        <div id="confirmPasswordDiv">
+            <label for="confirm_password">パスワード確認</label>
+            {{ form.confirm_password(id="confirm_password", size=32) }}
+            {% if form.confirm_password.errors %}
+                <span class="error-message">{{ form.confirm_password.errors[0] }}</span>
+            {% endif %}
+        </div>
+
+        <!-- 利用規約 -->
+        <div id="termsDiv">
+            {{ form.terms(id="terms") }}
+            <label for="terms">利用規約に同意します</label>
+            <button type="button" id="readTermsButton">利用規約を読む</button>
+            {% if form.terms.errors %}
+                <span class="error-message">{{ form.terms.errors[0] }}</span>
+            {% endif %}
+            <span class="warning-message" id="termsWarning" style="display: none;">利用規約を一読し、同意してください。</span>
+        </div>
+
+        <!-- プライバシーポリシー -->
+        <div id="privacyDiv">
+            {{ form.privacy(id="privacy") }}
+            <label for="privacy">プライバシーポリシーに同意します</label>
+            <button type="button" id="readPrivacyButton">プライバシーポリシーを読む</button>
+            {% if form.privacy.errors %}
+                <span class="error-message">{{ form.privacy.errors[0] }}</span>
+            {% endif %}
+            <span class="warning-message" id="privacyWarning" style="display: none;">プライバシーポリシーを一読し、同意してください。</span>
+        </div>
+
+        <div>
+            <button type="submit">登録</button>
+        </div>
+        <a href="{{ url_for('auth.login') }}" class="back-button">戻る</a>
+    </form>
+
+    <!-- 利用規約モーダル -->
+    <div id="termsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeTerms">&times;</span>
+            {% include 'terms.html' %}
+            <button type="button" id="acceptTerms">同意する</button>
+        </div>
+    </div>
+
+    <!-- プライバシーポリシーモーダル -->
+    <div id="privacyModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closePrivacy">&times;</span>
+            {% include 'privacy.html' %}
+            <button type="button" id="acceptPrivacy">同意する</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/register.js') }}"></script>
+</body>
+</html>

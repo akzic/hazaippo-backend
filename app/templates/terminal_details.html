@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ターミナル詳細 | はざいっぽ</title>
+    <link rel="stylesheet" href="/static/css/terminal_details.css">
+    <script src="/static/js/terminal_details.js"></script>
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>ターミナル詳細</h1>
+    <main>
+        <!-- ターミナルの詳細情報 -->
+        <section id="terminal-info">
+            <h2>ターミナル情報</h2>
+            <p><strong>名称:</strong> {{ terminal.name }}</p>
+            <p><strong>住所:</strong> {{ terminal.address }}, {{ terminal.city }}, {{ terminal.prefecture }}</p>
+            <div id="map">
+                <!-- Google Maps などの埋め込み地図を表示 -->
+                <iframe src="https://www.google.com/maps/embed?pb=..." width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy"></iframe>
+            </div>
+        </section>
+
+        <!-- 内装や部屋の画像 -->
+        <section id="room-images">
+            <h2>内装・部屋の状況</h2>
+            <div class="image-gallery">
+                {% for image in terminal.images %}
+                    <img src="{{ url_for('static', filename=image) }}" alt="部屋の画像">
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- 操作ボタン -->
+        <section id="action-buttons">
+            <button id="view-schedule" onclick="viewSchedule()">予約可能日程を確認する</button>
+            <button id="favorite-terminal" onclick="toggleFavorite()">お気に入りに設定する</button>
+            <button id="back-to-search" onclick="goBack()">戻る</button>
+        </section>
+
+        <!-- お気に入り設定メッセージ -->
+        <div id="favorite-message" style="display:none;">
+            <p>お気に入りに設定しました。</p>
+        </div>
+
+        <a href="{{ url_for('terminal.search') }}" class="back-button">戻る</a>
+    </main>
+
+    <script>
+        function viewSchedule() {
+            window.location.href = `/terminal/schedule/{{ terminal.id }}`;
+        }
+
+        function toggleFavorite() {
+            document.getElementById('favorite-message').style.display = 'block';
+            setTimeout(function() {
+                document.getElementById('favorite-message').style.display = 'none';
+            }, 5000);
+        }
+
+        function goBack() {
+            window.location.href = "{{ url_for('terminal.search') }}";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #4db995;
+}
+
+h2 {
+    color: #333;
+    margin-top: 0;
+}
+
+.card {
+    max-width: 600px;
+    margin: auto;
+    padding: 20px;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 15px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.card img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin-bottom: 15px;
+}
+
+.card p {
+    margin: 10px 0;
+}
+
+.button-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+}
+
+.btn {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 20px;
+    margin-right: 10px;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: opacity 0.3s;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: #d66a35;
+    border-color: #d66a35;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.btn-secondary.back-button {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    margin-left: auto;
+}
+
+.btn-secondary.back-button:hover {
+    opacity: 0.9;
+}
+
+#profileDetails {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f9f9f9;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+}

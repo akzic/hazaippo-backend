@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>端材のリクエスト - はざいっぽ</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/request_material.css') }}">
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="container">
+        <h1>端材のリクエスト</h1>
+        <div class="card">
+            <div class="card-body">
+                {% if material.image and material.image != 'default.jpg' %}
+                    <img src="{{ url_for('static', filename='images/' ~ material.image) }}" alt="端材の画像" id="imagePreview">
+                {% else %}
+                    <p class="no-image">登録された画像はありません</p>
+                {% endif %}
+                <div class="material-info">
+                    <p><strong>種類:</strong> {{ material.type }}</p>
+                    {% if material.type == "木材" and material.wood_type %}
+                        <p><strong>木材の種類:</strong> {{ material.wood_type }}</p>
+                    {% elif material.type == "ボード材" and material.board_material_type %}
+                        <p><strong>ボード材の種類:</strong> {{ material.board_material_type }}</p>
+                    {% elif material.type == "パネル材" and material.panel_type %}
+                        <p><strong>パネル材の種類:</strong> {{ material.panel_type }}</p>
+                    {% endif %}
+                    <p><strong>場所:</strong> {{ material.location }}</p>
+                    <p><strong>数量:</strong> {{ material.quantity }}</p>
+                    <p><strong>締切日:</strong> {{ material.deadline.strftime('%Y-%m-%d') if material.deadline else '未設定' }}</p>
+                    <p><strong>土日受け渡し:</strong>
+                        {% if material.exclude_weekends %}
+                            不可
+                        {% else %}
+                            可能
+                        {% endif %}
+                    </p>
+                    <p><strong>備考:</strong> {{ material.note or 'なし' }}</p>
+                </div>
+                <form method="POST" action="{{ url_for('requests_bp.request_material', material_id=material.id) }}" id="requestForm">
+                    {{ form.hidden_tag() }}
+                    <div class="button-group">
+                        <button type="button" class="btn primary-btn" id="openModal">リクエスト送信</button>
+                        <a href="{{ url_for('search.search_materials') }}" class="btn secondary-btn">戻る</a>
+                    </div>
+                    {% if form.errors %}
+                        <div class="error-messages">
+                            <ul>
+                                {% for field, errors in form.errors.items() %}
+                                    {% for error in errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert {{ category }}">
+                            {{ message }}
+                            <span class="close-btn" data-close>&times;</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- 確認モーダル -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>リクエスト送信の確認</h2>
+                <span class="close-modal" id="closeModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>リクエストを送信しますがよろしいですか。</p>
+                <p>リクエスト受信者が承認スキップの設定を行なっていた場合、即座にマッチングされます。</p>
+                <p>基本的に、端材を受け取る方が渡す方の住所へ伺う形となります。</p>
+                <p>承認後はチャット等で住所や時間の確認後、直接受け渡しをしていただきます。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn secondary-btn" id="cancelModal">キャンセル</button>
+                <button type="button" class="btn primary-btn" id="confirmSubmit">送信する</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/request_material.js') }}"></script>
+</body>
+</html>

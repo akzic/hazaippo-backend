@@ -1,0 +1,33 @@
+<!-- app/templates/partials/search_wanted_results.html -->
+{% if results %}
+    <ul class="search-results-list">
+        {% for result in results %}
+            <li class="search-result-item">
+                <div class="result-info">
+                    <p>端材の種類: {{ result.type }}</p>
+                    
+                    <!-- サブタイプの表示 -->
+                    {% if result.type == "木材" and result.wood_type %}
+                        <p>木材の種類: {{ result.wood_type }}</p>
+                    {% elif result.type == "ボード材" and result.board_material_type %}
+                        <p>ボード材の種類: {{ result.board_material_type }}</p>
+                    {% elif result.type == "パネル材" and result.panel_type %}
+                        <p>パネル材の種類: {{ result.panel_type }}</p>
+                    {% endif %}
+                    
+                    <p>サイズ: {{ result.size_1 }} x {{ result.size_2 }} x {{ result.size_3 }} mm</p>
+                    <p>受け渡し場所: {{ result.location }}</p>
+                </div>
+                
+                <div class="result-actions">
+                    <a href="{{ url_for('materials.detail_wanted', wanted_material_id=result.id) }}" class="btn btn-primary">詳細</a>
+                </div>
+                
+                <!-- マップ表示用の要素を削除 -->
+                <!-- <div id="map-{{ result.id }}" class="material-map" style="display: none;"></div> -->
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>検索結果がありません。</p>
+{% endif %}

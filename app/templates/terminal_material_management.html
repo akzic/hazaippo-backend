@@ -1,0 +1,217 @@
+<!-- app/templates/terminal_material_management.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ターミナル端材管理（{{ terminal_name }}) | はざいっぽ</title>
+    <link rel="stylesheet" href="/static/css/terminal_material_management.css">
+    <script src="/static/js/terminal_material_management.js"></script>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            text-align: left;
+        }
+
+        .action-buttons button {
+            margin-right: 5px;
+        }
+
+        .editable {
+            background-color: #ffffcc;
+        }
+    </style>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+    {% include 'header.html' %}
+    <h1>ターミナル端材管理（{{ terminal_name }})</h1>
+    <main>
+        <!-- ターミナル管理者に紐づいた端材リスト -->
+        <section id="material-list">
+            <h2>端材リスト</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <th>場所</th>
+                        <th>登録日</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="material-table">
+                    {% for material in materials %}
+                    <tr data-material-id="{{ material.id }}">
+                        <td class="type">{{ material.type }}</td>
+                        <td class="quantity">{{ material.quantity }}</td>
+                        <td class="size">{{ material.size_1 }} × {{ material.size_2 }} × {{ material.size_3 }}</td>
+                        <td class="location">{{ material.location }}</td>
+                        <td class="created_at">{{ material.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="note">{{ material.note }}</td>
+                        <td class="action-buttons">
+                            {% if is_admin or material.user_id == current_user.id %}
+                                <button class="edit-button" onclick="editRow(this)">編集</button>
+                                <form method="POST" action="{{ url_for('terminal_management.terminal_material_management') }}" style="display:inline;">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="material_id" value="{{ material.id }}">
+                                    <button type="submit" onclick="return confirm('本当に削除しますか？');">削除</button>
+                                </form>
+                            {% else %}
+                                <button onclick="manageStock('{{ material.id }}')">在庫管理</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
+    </main>
+
+    <script>
+        function manageStock(materialId) {
+            // 在庫管理の処理を実装
+            alert('在庫管理機能が呼び出されました。端材ID: ' + materialId);
+        }
+
+        function editRow(button) {
+            const row = button.closest('tr');
+            const materialId = row.getAttribute('data-material-id');
+
+            // Convert cells to input fields
+            const typeCell = row.querySelector('.type');
+            const quantityCell = row.querySelector('.quantity');
+            const sizeCell = row.querySelector('.size');
+            const locationCell = row.querySelector('.location');
+            const noteCell = row.querySelector('.note');
+            const actionCell = row.querySelector('.action-buttons');
+
+            const type = typeCell.textContent.trim();
+            const quantity = quantityCell.textContent.trim();
+            let size = sizeCell.textContent.trim().split(' × ');
+            const location = locationCell.textContent.trim();
+            const note = noteCell.textContent.trim();
+
+            // Ensure size has exactly 3 elements
+            while (size.length < 3) {
+                size.push('');
+            }
+
+            typeCell.innerHTML = `<input type="text" value="${type}" />`;
+            quantityCell.innerHTML = `<input type="number" min="1" value="${quantity}" />`;
+            sizeCell.innerHTML = `
+                <input type="text" class="size_1" value="${size[0]}" style="width: 30%;" /> × 
+                <input type="text" class="size_2" value="${size[1]}" style="width: 30%;" /> × 
+                <input type="text" class="size_3" value="${size[2]}" style="width: 30%;" />
+            `;
+            locationCell.innerHTML = `<input type="text" value="${location}" />`;
+            noteCell.innerHTML = `<input type="text" value="${note}" />`;
+
+            // Change action buttons to '完了' and 'キャンセル'
+            actionCell.innerHTML = `
+                <button class="complete-button" onclick="completeEdit(this, ${materialId})">完了</button>
+                <button class="cancel-button" onclick="cancelEdit(this, ${materialId})">キャンセル</button>
+            `;
+
+            // Highlight editable row
+            row.classList.add('editable');
+        }
+
+        function completeEdit(button, materialId) {
+            const row = button.closest('tr');
+
+            const typeInput = row.querySelector('.type input');
+            const quantityInput = row.querySelector('.quantity input');
+            const size1Input = row.querySelector('.size_1');
+            const size2Input = row.querySelector('.size_2');
+            const size3Input = row.querySelector('.size_3');
+            const locationInput = row.querySelector('.location input');
+            const noteInput = row.querySelector('.note input');
+
+            const type = typeInput.value.trim();
+            const quantity = quantityInput.value.trim();
+            const size_1 = size1Input.value.trim();
+            const size_2 = size2Input.value.trim();
+            const size_3 = size3Input.value.trim();
+            const location = locationInput.value.trim();
+            const note = noteInput.value.trim();
+
+            // Retrieve CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('action', 'edit');
+            formData.append('type', type);
+            formData.append('quantity', quantity);
+            formData.append('size_1', size_1);
+            formData.append('size_2', size_2);
+            formData.append('size_3', size_3);
+            formData.append('location', location); // Optional
+            formData.append('note', note);         // Optional
+            formData.append('csrf_token', csrfToken); // CSRF トークンを追加
+
+            // Send POST request to update_material endpoint
+            fetch(`/terminal_management/material/update/${materialId}`, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Update the row with new data
+                    row.querySelector('.type').textContent = type;
+                    row.querySelector('.quantity').textContent = quantity;
+                    row.querySelector('.size').textContent = `${size_1} × ${size_2} × ${size_3}`;
+                    row.querySelector('.location').textContent = location;
+                    row.querySelector('.note').textContent = note;
+
+                    // Restore action buttons
+                    row.querySelector('.action-buttons').innerHTML = `
+                        <button class="edit-button" onclick="editRow(this)">編集</button>
+                        <form method="POST" action="/terminal_management/terminal_material_management" style="display:inline;">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="material_id" value="${materialId}">
+                            <button type="submit" onclick="return confirm('本当に削除しますか？');">削除</button>
+                        </form>
+                    `;
+
+                    // Remove editable highlight
+                    row.classList.remove('editable');
+
+                    alert(data.message);
+                } else {
+                    alert(`端材の更新に失敗しました: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating material:', error);
+                alert('端材の更新中にエラーが発生しました。');
+            });
+        }
+
+        function cancelEdit(button, materialId) {
+            const row = button.closest('tr');
+
+            // Retrieve original data from server or reload the page
+            // For simplicity, reload the page to discard changes
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>

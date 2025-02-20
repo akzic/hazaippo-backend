@@ -1,0 +1,133 @@
+<!-- app/templates/search.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>提供端材検索 - はざいっぽ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}">
+    
+    <!-- jQuery の読み込み -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Google Maps API のスクリプト -->
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places" defer></script>
+        
+    <!-- search.js の読み込み -->
+    <script src="{{ url_for('static', filename='js/search.js') }}" defer></script>
+</head>
+<body>
+    {% include 'header.html' %}
+    <div class="container">
+        <h1>提供端材検索</h1>
+        
+        <!-- フラッシュメッセージの表示 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="flash-container">
+                    {% for category, message in messages %}
+                        <div class="flash-message alert alert-{{ 'danger' if category == 'error' else category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <form id="search-form" method="POST" action="{{ url_for('search.search_materials') }}">
+            {{ material_form.hidden_tag() }}
+            
+            <!-- 端材の種類フィールド -->
+            <div class="form-group">
+                {{ material_form.material_type.label }}
+                {{ material_form.material_type(id="material_type", class="form-control") }}
+                {% for error in material_form.material_type.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </div>
+
+            <!-- 木材の種類フィールド -->
+            <div class="form-group" id="wood_type_group" style="display: none;">
+                {{ material_form.wood_type.label }}
+                {{ material_form.wood_type(id="wood_type", class="form-control") }}
+                {% for error in material_form.wood_type.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </div }
+
+            <!-- ボード材の種類フィールド -->
+            <div class="form-group" id="board_material_type_group" style="display: none;">
+                {{ material_form.board_material_type.label }}
+                {{ material_form.board_material_type(id="board_material_type", class="form-control") }}
+                {% for error in material_form.board_material_type.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </div>
+
+            <!-- パネル材の種類フィールド -->
+            <div class="form-group" id="panel_type_group" style="display: none;">
+                {{ material_form.panel_type.label }}
+                {{ material_form.panel_type(id="panel_type", class="form-control") }}
+                {% for error in material_form.panel_type.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </div>
+
+            <!-- サイズフィールド -->
+            <div class="form-group">
+                <label>サイズ（mm）</label><br>
+                <div class="size-fields">
+                    {{ material_form.material_size_1(class="form-control", style="width: 30%; display: inline-block;") }} ×
+                    {{ material_form.material_size_2(class="form-control", style="width: 30%; display: inline-block;") }} ×
+                    {{ material_form.material_size_3(id="size_3", class="form-control", placeholder="", style="width: 30%; display: inline-block;") }}
+                </div>
+                {% for error in material_form.material_size_1.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+                {% for error in material_form.material_size_2.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+                {% for error in material_form.material_size_3.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </div }            
+
+            <!-- 都道府県フィールド -->
+            <div class="form-group">
+                {{ material_form.m_prefecture.label }}
+                {{ material_form.m_prefecture(id="m_prefecture", class="form-control") }}
+                {% for error in material_form.m_prefecture.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </div>
+
+            <!-- 市区町村フィールド -->
+            <div class="form-group">
+                {{ material_form.m_city.label }}
+                {{ material_form.m_city(id="m_city", class="form-control", placeholder="市区町村を入力してください") }}
+                {% for error in material_form.m_city.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="search-button btn-primary">検索</button>
+                <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button btn-secondary">戻る</a>
+            </div>
+        </form>
+
+        <!-- 検索結果を表示するコンテナ -->
+        <div id="search-results">
+            <!-- 検索結果はここにAJAXで読み込まれます -->
+        </div>
+
+        <!-- 検索結果がない場合のモーダル -->
+        <div id="no-results-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-button">&times;</span>
+                <h2>検索結果</h2>
+                <p>検索結果が見つかりませんでした。</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
