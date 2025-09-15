@@ -3,12 +3,12 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>欲しい端材の詳細 - はざいっぽ</title>
+    <title>欲しい資材の詳細 - はざいっぽ</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/detail.css') }}">
 </head>
 <body>
     {% include 'header.html' %}
-    <h1>希望端材の詳細</h1>
+    <h1>希望資材の詳細</h1>
     <div class="card">
         <p>種類: {{ wanted_material.type }}</p>
         {% if wanted_material.type == "木材" and wanted_material.wood_type %}

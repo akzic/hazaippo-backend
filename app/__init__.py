@@ -1,6 +1,6 @@
 # app/__init__.py
 
-from flask import Flask, jsonify, redirect, url_for
+from flask import Flask, jsonify, redirect, url_for, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, current_user
@@ -19,6 +19,7 @@ from flask_restful import Api
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_jwt_extended import JWTManager
+from firebase_admin import credentials, initialize_app
 
 # Flask拡張の初期化
 db = SQLAlchemy()
@@ -37,6 +38,16 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # ─────────────────────────────────────────────
+    #  DB 接続時にセッション TZ を強制的に Asia/Tokyo へ
+    # ─────────────────────────────────────────────
+    # SQLALCHEMY_ENGINE_OPTIONS が既に dict ならマージ、
+    # 無ければ新しく作ってから connect_args を追加
+    engine_opts = app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+    connect_args = engine_opts.setdefault('connect_args', {})
+    # 既存オプションを壊さないよう update
+    connect_args.update({'options': '-c timezone=Asia/Tokyo'})
+
     # Flask拡張の初期化
     db.init_app(app)
     bcrypt.init_app(app)
@@ -48,6 +59,13 @@ def create_app(config_class=Config):
     socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
     limiter.init_app(app)
     jwt.init_app(app)
+    cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    if cred_path:                          # .env が読み込まれていればパスが入る
+        cred = credentials.Certificate(cred_path)
+        try:
+            initialize_app(cred)           # すでに初期化済みでも ValueError
+        except ValueError:
+            pass
 
     # アップロードサイズの制限（5MB）
     app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
@@ -92,6 +110,16 @@ def create_app(config_class=Config):
     # propagate を無効化
     user_activity_logger.propagate = False
 
+    # unauthorized_handler の定義（各リクエストでAjaxリクエストの場合は JSON レスポンス、それ以外はログイン画面へリダイレクト）
+    @login_manager.unauthorized_handler
+    def unauthorized_callback():
+        # APIエンドポイントの場合、またはAjaxリクエストとして認識できた場合はJSONで返す
+        if '/api' in request.path.lower() or request.headers.get('X-Requested-With', '').lower() == 'xmlhttprequest':
+
+            return jsonify({'msg': 'Unauthorized'}), 401
+        else:
+            return redirect(url_for('auth.login'))
+
     # Celeryの初期化をBlueprintの登録前に行う
     from app.celery_app import init_celery
     init_celery(app)
@@ -109,12 +137,14 @@ def create_app(config_class=Config):
     from app.blueprints.chat import chat_bp
     from app.blueprints.site import site_bp
     from app.blueprints.camera_ai import camera_ai_bp
+    from app.blueprints.assetlinks import assetlinks_bp
+    from app.blueprints.groups import groups_bp
 
     # APIブループリントのインポート
     from app.api.api_auth import api_auth as api_auth_bp
     from app.api.api_dashboard import api_dashboard as api_dashboard_bp
-    from app.api.api_requests import api_requests as api_requests_bp
-    from app.api.api_materials import api_materials as api_materials_bp
+    from app.api.api_requests import api_requests_bp
+    from app.api.api_materials import api_materials_bp
     from app.api.api_chat import api_chat_bp
     from app.api.api_profile import api_profile_bp
     from app.api.api_search import api_search_bp
@@ -122,7 +152,8 @@ def create_app(config_class=Config):
     from app.api.api_terminal_management import api_terminal_management_bp
     from app.api.api_terminal import api_terminal_bp
     from app.api.api_utils import api_utils_bp
-    from app.api.api_email_notifications import api_email_notifications_bp
+    from app.api.api_notifications import api_notifications_bp
+    from app.api.api_groups import api_groups_bp
 
     # APIブループリントをCSRF保護から除外
     csrf.exempt(api_auth_bp)
@@ -136,8 +167,10 @@ def create_app(config_class=Config):
     csrf.exempt(api_terminal_management_bp)
     csrf.exempt(api_terminal_bp)
     csrf.exempt(api_utils_bp)
-    csrf.exempt(api_email_notifications_bp)
-    csrf.exempt(camera_ai_bp)  # 新規追加
+    csrf.exempt(camera_ai_bp)
+    csrf.exempt(api_notifications_bp)
+    csrf.exempt(assetlinks_bp)
+    csrf.exempt(api_groups_bp)
 
     # Blueprintの登録にurl_prefixを追加
     app.register_blueprint(auth_bp)
@@ -152,6 +185,9 @@ def create_app(config_class=Config):
     app.register_blueprint(chat_bp, url_prefix='/chat')
     app.register_blueprint(site_bp, url_prefix='/site')
     app.register_blueprint(camera_ai_bp, url_prefix='/camera_ai')
+    app.register_blueprint(api_notifications_bp, url_prefix='/api/notifications')
+    app.register_blueprint(assetlinks_bp)
+    app.register_blueprint(groups_bp, url_prefix='/groups')
 
     # APIブループリントの登録
     app.register_blueprint(api_auth_bp, url_prefix='/api/auth')
@@ -165,7 +201,7 @@ def create_app(config_class=Config):
     app.register_blueprint(api_terminal_management_bp, url_prefix='/api/terminal_management')
     app.register_blueprint(api_terminal_bp, url_prefix='/api/terminal')
     app.register_blueprint(api_utils_bp, url_prefix='/api/utils')
-    app.register_blueprint(api_email_notifications_bp, url_prefix='/api/email_notifications')
+    app.register_blueprint(api_groups_bp)
 
     # タイムゾーンの設定
     app.config['TIMEZONE'] = timezone('Asia/Tokyo')
@@ -176,10 +212,8 @@ def create_app(config_class=Config):
             return ""
         jst = app.config['TIMEZONE']
         if value.tzinfo is None:
-            utc_value = value.replace(tzinfo=timezone('UTC'))
-        else:
-            utc_value = value.astimezone(timezone('UTC'))
-        jst_value = utc_value.astimezone(jst)
+            value = value.replace(tzinfo=jst)
+        jst_value = value.astimezone(jst)
         return jst_value.strftime('%Y-%m-%d %H:%M:%S')
 
     # コンテキストプロセッサの追加
@@ -210,5 +244,10 @@ def create_app(config_class=Config):
     @app.errorhandler(500)
     def internal_error(error):
         return jsonify({'message': 'Internal Server Error'}), 500
+
+    @app.route("/health")
+    def health():
+        # 何もせず 200 を返すだけ
+        return "OK", 200
 
     return app

@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>欲しい端材 一括登録 - はざいっぽ</title>
+  <title>欲しい資材 一括登録 - はざいっぽ</title>
   <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/register_material.css') }}">
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <style>
@@ -40,7 +40,7 @@
       font-size: 0.85rem;
       padding: 2px 5px;
     }
-    /* サブタイプフィールド用コンテナ：上マージンを 0 にして端材の種類と揃える */
+    /* サブタイプフィールド用コンテナ：上マージンを 0 にして資材の種類と揃える */
     .subtype-container {
       margin-top: 0;
     }
@@ -57,12 +57,12 @@
 <body>
   {% include 'header.html' %}
   <div class="container bulk-container mt-5">
-    <h1>欲しい端材 一括登録</h1>
+    <h1>欲しい資材 一括登録</h1>
     <form method="POST" action="{{ url_for('materials.bulk_register_wanted') }}">
       {{ form.hidden_tag() }}
       {% for subform in form.materials %}
         <div class="bulk-entry">
-          <!-- 1行目：端材の種類とサブタイプ -->
+          <!-- 1行目：資材の種類とサブタイプ -->
           <div class="row">
             <div class="col" style="flex: 0 0 45%;">
               {{ subform.material_type.label }}<br>

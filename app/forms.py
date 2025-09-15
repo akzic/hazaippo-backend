@@ -236,11 +236,6 @@ class RequestResetForm(FlaskForm):
     )
     submit = SubmitField('Request Password Reset')
 
-    def validate_email(self, email):
-        user = User.query.filter_by(email=email.data).first()
-        if user is None:
-            raise ValidationError('このメールアドレスに該当するアカウントはありません。')
-
 class ResetPasswordForm(FlaskForm):
     password = PasswordField(
         'Password',
@@ -279,7 +274,7 @@ class MaterialForm(FlaskForm):
     )
     
     material_type = SelectField(
-        '端材の種類',
+        '資材の種類',
         id='material_type',
         choices=[
             ('', '選択してください'),
@@ -289,7 +284,7 @@ class MaterialForm(FlaskForm):
             ('パネル材', 'パネル材'),
             ('その他', 'その他')
         ],
-        validators=[DataRequired(message="端材の種類を選択してください。")]
+        validators=[DataRequired(message="資材の種類を選択してください。")]
     )
     
     # サブタイプフィールドをオプションに変更
@@ -447,7 +442,13 @@ class MaterialForm(FlaskForm):
     exclude_weekends = BooleanField('土日を除く')  # 新しいチェックボックス
     image = FileField('画像', validators=[Optional()])
     note = TextAreaField('受け渡し時の注意点', validators=[Optional()])
-    
+    group_id = SelectField(
+        'グループ選択',
+        coerce=int,           # int にキャスト
+        choices=[],           # ビュー側で動的セット
+        default=0             # 0 = 未選択
+    )
+
     submit = SubmitField('登録')
     
     def validate_deadline(self, deadline):
@@ -495,7 +496,7 @@ class MaterialForm(FlaskForm):
 
 class MaterialSearchForm(FlaskForm):
     material_type = SelectField(
-        '端材の種類',
+        '資材の種類',
         id='search_material_type',
         choices=[
             ('', '選択してください'),
@@ -505,7 +506,7 @@ class MaterialSearchForm(FlaskForm):
             ('パネル材', 'パネル材'),
             ('その他', 'その他')
         ],
-        validators=[DataRequired(message="端材の種類を選択してください。")]
+        validators=[DataRequired(message="資材の種類を選択してください。")]
     )
     
     # 木材の種類フィールド
@@ -1251,7 +1252,7 @@ class SiteForm(FlaskForm):
     submit = SubmitField('Register Site')
 
 class BulkMaterialForm(FlaskForm):
-    # 端材エントリーを10個デフォルトで表示
+    # 資材エントリーを10個デフォルトで表示
     materials = FieldList(FormField(MaterialForm), min_entries=10, max_entries=10)
     submit = SubmitField('一括登録')
 
@@ -1286,7 +1287,42 @@ class BulkMaterialForm(FlaskForm):
 
         # すべてのエントリーで material_type が未選択の場合は全体エラー
         if valid_entries == 0:
-            self.materials.errors.append("少なくとも1つのエントリーで端材の種類を選択してください。")
+            self.materials.errors.append("少なくとも1つのエントリーで資材の種類を選択してください。")
             overall_valid = False
 
         return overall_valid
+
+class DeleteAccountForm(FlaskForm):
+    # もしフィールドが必要なら定義する
+    # 何も不要なら空でもよい
+    pass
+
+class RejectRequestMaterialForm(FlaskForm):
+    submit = SubmitField('拒否')
+
+class RejectRequestWantedForm(FlaskForm):
+    submit = SubmitField('拒否')
+
+class CreateGroupForm(FlaskForm):
+    """新規グループ作成フォーム"""
+    name = StringField(
+        'グループ名',
+        validators=[DataRequired(), Length(max=100)]
+    )
+    description = TextAreaField(
+        '説明',
+        validators=[Length(max=500)]
+    )
+    submit = SubmitField('作成')
+
+class UpdateGroupForm(FlaskForm):
+    """グループ編集フォーム"""
+    name = StringField(
+        'グループ名',
+        validators=[DataRequired(), Length(max=100)]
+    )
+    description = TextAreaField(
+        '説明',
+        validators=[Length(max=500)]
+    )
+    submit = SubmitField('保存')

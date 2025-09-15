@@ -3,12 +3,13 @@
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, current_app
 from app import db
 from app.forms import MaterialForm, WantedMaterialForm, DeleteHistoryForm, BulkMaterialForm
-from app.models import Material, WantedMaterial, User, Site, Request
+from app.models import Material, WantedMaterial, User, Site, Request, UserGroup, GroupMembership, GroupRole
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from app.blueprints.utils import log_user_activity
 from app.blueprints.email_notifications import send_material_registration_email, send_wanted_material_registration_email
+from app.utils.s3_uploader import upload_file_to_s3
 import pytz
 import os
 from wtforms.validators import ValidationError
@@ -17,6 +18,8 @@ import re  # 住所解析に必要
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from uuid import uuid4
+from app.utils.s3_uploader import build_s3_url, upload_file_to_s3, convert_heic_to_jpeg
+import mimetypes
 
 # 正しいインポートパスに修正
 from app.image_processing import process_image_ai
@@ -31,7 +34,7 @@ JST = pytz.timezone('Asia/Tokyo')
 logger = logging.getLogger(__name__)
 
 # アップロード可能なファイル拡張子の設定
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'HEIC'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif'}
 
 def allowed_file(filename):
     """許可された拡張子のファイルかどうかを判定する関数"""
@@ -104,158 +107,184 @@ def parse_japanese_address(location):
         logger.error(f"住所のパース中にエラーが発生しました: {e}")
         return None
 
-@materials_bp.route('/register_material', methods=['GET', 'POST'])
+@materials_bp.route("/register_material", methods=["GET", "POST"])
 @login_required
 def register_material():
     form = MaterialForm()
+
+    if current_user.business_structure in (0, 1):
+        # 自分がメンバーのアクティブグループだけ取得
+        active_groups = (UserGroup.query
+                         .join(GroupMembership, UserGroup.id == GroupMembership.group_id)
+                         .filter(GroupMembership.user_id == current_user.id,
+                                 UserGroup.deleted_at.is_(None))
+                         .all())
+        form.group_id.choices = [(0, '--- グループ内のみで資材を登録したい場合選択 ---')] + \
+                                [(g.id, g.name) for g in active_groups]
+    else:
+        # 個人ユーザー→選択肢ゼロ
+        form.group_id.choices = [(0, '（法人限定）')]
+
+    # ────────────────────────── POST ────────────────────────── #
     if form.validate_on_submit():
         try:
-            current_app.logger.debug("フォームの送信が検出されました。")
+            current_app.logger.debug("フォーム POST を受信")
 
-            # 画像の保存処理
-            image_file = None
-            if form.image.data:
-                if allowed_file(form.image.data.filename):
-                    # ユニークなファイル名を生成
-                    original_filename = secure_filename(form.image.data.filename)
-                    unique_id = uuid4().hex
-                    name, ext = os.path.splitext(original_filename)
-                    unique_filename = f"{name}_{unique_id}{ext}"
-                    upload_path = os.path.join(current_app.root_path, 'static/uploads', unique_filename)
+            # ────────────────────────── 1) 画像アップロード & S3 保存 ──────────────────────────
+            image_key = None
+            local_tmp = None  # AI 用一時ファイルパス
 
-                    # ファイルを保存
-                    form.image.data.save(upload_path)
-                    image_file = unique_filename
-                    current_app.logger.debug(f"画像が保存されました: {upload_path}")
+            if form.image.data and allowed_file(form.image.data.filename):
+                original_filename = secure_filename(form.image.data.filename)
+                ext = os.path.splitext(original_filename)[1].lower()
+
+                # ---------- HEIC / HEIF なら JPEG へ変換 ----------
+                if ext in ('.heic', '.heif'):
+                    jpeg_io, _ = _convert_heic_to_jpeg(form.image.data)   # ← s3_uploader のヘルパ
+                    # S3 アップロード（BytesIO なので filename/mimetype を付与）
+                    jpeg_io.filename = f"{uuid4().hex}.jpg"
+                    jpeg_io.mimetype = 'image/jpeg'
+                    image_key = upload_file_to_s3(jpeg_io, folder="materials")
+
+                    # AI 用一時ファイルも保存
+                    tmp_dir = os.path.join(current_app.root_path, "tmp")
+                    os.makedirs(tmp_dir, exist_ok=True)
+                    local_tmp = os.path.join(tmp_dir, f"{uuid4().hex}.jpg")
+                    with open(local_tmp, "wb") as fh:
+                        fh.write(jpeg_io.getbuffer())
+
                 else:
-                    flash('許可されていないファイル形式です。', 'error')
-                    current_app.logger.debug(f"許可されていないファイル形式のファイルがアップロードされました: {form.image.data.filename}")
-                    return render_template('register_material.html', form=form, business_structure=current_user.business_structure)
+                    # ---------- S3 にオリジナルをアップ ----------
+                    image_key = upload_file_to_s3(form.image.data, folder="materials")
 
-            # AIによる画像処理
+                    # ---------- AI 用一時ファイル ----------
+                    tmp_dir = os.path.join(current_app.root_path, "tmp")
+                    os.makedirs(tmp_dir, exist_ok=True)
+                    local_tmp = os.path.join(tmp_dir, f"{uuid4().hex}{ext or '.jpg'}")
+                    form.image.data.stream.seek(0)
+                    form.image.data.save(local_tmp)
+
+                current_app.logger.debug(f"S3 upload 完了: key={image_key}")
+
+            elif form.image.data:
+                flash("許可されていないファイル形式です。", "error")
+                return render_template(
+                    "register_material.html",
+                    form=form,
+                    business_structure=current_user.business_structure
+                )
+
+            # 2) Gemini 2.5 Flash で画像解析
             material_type_ai = "その他"
-            ai_location = None  # AIからのlocationデータを保持
-            if image_file:
-                temp_path = os.path.join(current_app.root_path, 'static/uploads', image_file)
-                ai_result = process_image_ai(temp_path)
-                if ai_result['status'] == 'success':
-                    material_type_ai = ai_result['material_type']
-                    ai_location = ai_result.get('location')  # AIからのlocationデータが含まれている場合
-                    current_app.logger.debug(f"AIによる材質判定結果: {material_type_ai}")
-                    current_app.logger.debug(f"AIによる位置情報: {ai_location}")
+            subtype_ai = ""
+            size1_ai = size2_ai = size3_ai = ""
+            quantity_ai = None
+
+            if local_tmp:
+                ai = process_image_ai(local_tmp, preprocess=True)
+                os.remove(local_tmp)   # 一時ファイルは即削除
+
+                if ai["status"] == "success":
+                    material_type_ai = ai["material_type"] or "その他"
+                    subtype_ai = ai["subtype"] or ""
+                    size1_ai, size2_ai, size3_ai = ai["size_1"], ai["size_2"], ai["size_3"]
+                    if ai["quantity"] and str(ai["quantity"]).isdigit():
+                        quantity_ai = int(ai["quantity"])
+                    current_app.logger.debug(f"Gemini 判定: {ai}")
                 else:
-                    flash('AIによる画像解析に失敗しました。', 'warning')
-                    current_app.logger.warning(f"AI解析失敗: {ai_result['message']}")
+                    flash(f"AI 解析に失敗しました: {ai['message']}", "warning")
 
-            # business_structure を current_user から取得
-            business_structure = current_user.business_structure
-            current_app.logger.debug(f"User business_structure: {business_structure}")
-
-            # 位置情報の設定
+            # 3) 位置情報（AI から & フォーム入力）
+            ai_location = None     # 今回は Gemini で位置取得しない想定
             if ai_location:
-                # AIからのlocationを優先
                 location = ai_location.strip()
-                current_app.logger.debug(f"AIから提供された位置情報を使用します: '{location}'")
-                # 位置情報を解析して都道府県、市区町村、住所に分割
-                parsed_location = parse_japanese_address(location)
-                if parsed_location:
-                    m_prefecture = parsed_location['prefecture']
-                    m_city = parsed_location['city']
-                    m_address = parsed_location['address']
-                    current_app.logger.debug(f"Parsed Location - Prefecture: {m_prefecture}, City: {m_city}, Address: {m_address}")
+                parsed = parse_japanese_address(location)
+                if parsed:
+                    m_pref, m_city, m_addr = (
+                        parsed["prefecture"], parsed["city"], parsed["address"]
+                    )
                 else:
-                    # 解析に失敗した場合は空にする
-                    m_prefecture = ""
-                    m_city = ""
-                    m_address = ""
-                    current_app.logger.warning("AIによる位置情報の解析に失敗しました。")
+                    m_pref = m_city = m_addr = ""
             else:
-                # フォームからの入力を使用
-                m_prefecture = form.m_prefecture.data.strip()
+                m_pref = form.m_prefecture.data.strip()
                 m_city = form.m_city.data.strip()
-                m_address = form.m_address.data.strip()
-                location = f"{m_prefecture} {m_city} {m_address}"
-                current_app.logger.debug(f"連結された位置情報: '{location}'")
+                m_addr = form.m_address.data.strip()
+                location = f"{m_pref} {m_city} {m_addr}"
 
-            # company_name のバリデーション（business_structureが0または1の場合）
-            if business_structure in [0, 1]:
-                if not current_user.company_name.strip():
-                    flash('会社名が必要です。', 'error')
-                    current_app.logger.debug("business_structureが0または1なのに、company_nameが空です。")
-                    raise ValidationError('会社名が必要です。')
+            # 4) business_structure に応じた会社名必須チェック
+            if current_user.business_structure in (0, 1) and not current_user.company_name.strip():
+                raise ValidationError("会社名が必要です。")
 
-            # Materialオブジェクトの作成
+            # 5) Material オブジェクト生成
             new_material = Material(
                 user_id=current_user.id,
-                type=material_type_ai if image_file else form.material_type.data,  # AIによる判定を優先
-                size_1=form.material_size_1.data or 0.0,  # デフォルト値を設定
-                size_2=form.material_size_2.data or 0.0,  # デフォルト値を設定
-                size_3=form.material_size_3.data or 0.0,  # デフォルト値を設定
-                location=location,  # AIが提供する場合はそれを、そうでない場合はフォームからの連結値を設定
-                m_prefecture=m_prefecture,  # ここでm_prefectureを設定
-                m_city=m_city,              # ここでm_cityを設定
-                m_address=m_address,        # ここでm_addressを設定
-                quantity=form.quantity.data,
+                type=material_type_ai if image_key else form.material_type.data,
+                wood_type=subtype_ai if material_type_ai == "木材" else None,
+                board_material_type=subtype_ai if material_type_ai == "ボード材" else None,
+                panel_type=subtype_ai if material_type_ai == "パネル材" else None,
+                size_1=float(size1_ai) if size1_ai else (form.material_size_1.data or 0.0),
+                size_2=float(size2_ai) if size2_ai else (form.material_size_2.data or 0.0),
+                size_3=float(size3_ai) if size3_ai else (form.material_size_3.data or 0.0),
+                quantity=quantity_ai if quantity_ai is not None else form.quantity.data,
+                location=location,
+                m_prefecture=m_pref,
+                m_city=m_city,
+                m_address=m_addr,
                 deadline=form.deadline.data,
                 exclude_weekends=form.exclude_weekends.data,
-                image=image_file,
+                image=image_key,
                 note=form.note.data,
-                # 新しいカラムの設定をオプションに対応
-                wood_type=form.wood_type.data if (image_file and material_type_ai == "木材") else (form.wood_type.data if form.material_type.data == "木材" else None),
-                board_material_type=form.board_material_type.data if (image_file and material_type_ai == "ボード材") else (form.board_material_type.data if form.material_type.data == "ボード材" else None),
-                panel_type=form.panel_type.data if (image_file and material_type_ai == "パネル材") else (form.panel_type.data if form.material_type.data == "パネル材" else None)
+                group_id=form.group_id.data or None,
             )
-            current_app.logger.debug(f"New Material object created: {new_material}")
+            current_app.logger.debug(f"Material オブジェクト生成: {new_material}")
 
-            # 受け渡し場所がSiteテーブルに存在する場合は site_id を設定
+            # 6) Site テーブルの自動紐付け
             if location:
                 site = Site.query.filter(
-                    Site.site_prefecture.ilike(m_prefecture),
+                    Site.site_prefecture.ilike(m_pref),
                     Site.site_city.ilike(m_city),
-                    Site.site_address.ilike(m_address)
+                    Site.site_address.ilike(m_addr)
                 ).first()
+                new_material.site_id = site.id if site else None
 
-                if site:
-                    new_material.site_id = site.id
-                    current_app.logger.debug(f"Site found for location '{location}'. Setting site_id to {site.id}")
-                else:
-                    new_material.site_id = None
-                    #flash('指定された受け渡し場所がSiteテーブルに存在しません。site_idは設定されません。', 'warning')
-                    current_app.logger.debug(f"Site not found for location '{location}'. site_id is set to None.")
-            else:
-                new_material.site_id = None
-                current_app.logger.debug("location が空です。site_idは設定されません。")
-
+            # 7) DB 保存
             db.session.add(new_material)
             db.session.commit()
-            current_app.logger.debug(f"Material saved to database with id {new_material.id} and site_id {new_material.site_id}")
+            current_app.logger.debug(f"DB 保存完了 id={new_material.id}")
 
-            # メール送信処理の追加
+            # 8) メール通知
             send_material_registration_email(current_user, new_material)
-            current_app.logger.debug("メール送信処理が完了しました。")
 
-            flash('端材が正常に登録されました。', 'success')
-            return redirect(url_for('materials.register_material'))  # 修正ポイント
+            flash("資材が正常に登録されました。", "success")
+            return redirect(url_for("materials.register_material"))
 
+        # ---------------- 例外ハンドリング ---------------- #
         except ValidationError as ve:
-            # バリデーションエラーの場合はフォームに戻す
-            flash(str(ve), 'error')
-            current_app.logger.error(f"Validation error during material registration: {ve}")
-            return render_template('register_material.html', form=form, business_structure=business_structure)
+            flash(str(ve), "error")
+            current_app.logger.error(f"ValidationError: {ve}")
+            return render_template(
+                "register_material.html",
+                form=form,
+                business_structure=current_user.business_structure
+            )
 
-        except SQLAlchemyError as sae:
+        except SQLAlchemyError as se:
             db.session.rollback()
-            current_app.logger.error(f"Database error during material registration: {sae}")
-            flash('データベースエラーが発生しました。再度お試しください。', 'error')
-            return redirect(url_for('materials.register_material'))
+            current_app.logger.error(f"DB Error: {se}")
+            flash("データベースエラーが発生しました。", "error")
+            return redirect(url_for("materials.register_material"))
 
         except Exception as e:
-            current_app.logger.error(f"Error during material registration: {e}")
-            flash(f'端材の登録中にエラーが発生しました: {str(e)}', 'error')
-            return redirect(url_for('materials.register_material'))
-    else:
-        # GETリクエスト時は単にフォームを表示
-        return render_template('register_material.html', form=form, business_structure=current_user.business_structure)
+            current_app.logger.error(f"Unexpected Error: {e}")
+            flash(f"エラーが発生しました: {e}", "error")
+            return redirect(url_for("materials.register_material"))
+
+    # ────────────────────────── GET ────────────────────────── #
+    return render_template(
+        "register_material.html",
+        form=form,
+        business_structure=current_user.business_structure
+    )
 
 @materials_bp.route('/get_cities/<prefecture>', methods=['GET'])
 @login_required
@@ -492,7 +521,7 @@ def material_list():
         logger.debug(f"Current user business_structure: {business_structure}")
 
         if business_structure in [0, 1]:
-            # 同じ company_name, prefecture, city, address を持つユーザーが登録した端材を取得
+            # 同じ company_name, prefecture, city, address を持つユーザーが登録した資材を取得
             unmatched_materials = Material.query.options(joinedload('owner')).join(User, Material.user_id == User.id).filter(
                 Material.matched == False,
                 Material.completed == False,
@@ -522,7 +551,7 @@ def material_list():
                 User.address == current_user.address
             ).all()
         elif business_structure == 2:
-            # business_structure が2の場合、現在のユーザーが登録した端材のみを表示
+            # business_structure が2の場合、現在のユーザーが登録した資材のみを表示
             unmatched_materials = Material.query.options(joinedload('owner')).filter_by(
                 user_id=current_user.id,
                 matched=False,
@@ -543,7 +572,7 @@ def material_list():
                 deleted=False
             ).all()
         else:
-            # その他の business_structure の場合、端材を表示しない
+            # その他の business_structure の場合、資材を表示しない
             unmatched_materials = []
             matched_uncompleted_materials = []
             completed_materials = []
@@ -560,7 +589,7 @@ def material_list():
     except Exception as e:
         # エラーをログに記録
         current_app.logger.error(f"Error fetching material list: {e}")
-        return render_template('error.html', message='端材一覧の取得中にエラーが発生しました。'), 500
+        return render_template('error.html', message='資材一覧の取得中にエラーが発生しました。'), 500
 
 @materials_bp.route('/edit_material_ajax/<int:material_id>', methods=['POST'])
 @login_required
@@ -662,11 +691,11 @@ def edit_material_ajax(material_id):
         material.note = note
     
         db.session.commit()
-        return jsonify({'status': 'success', 'message': '端材が更新されました。', 'material': material.to_dict()}), 200
+        return jsonify({'status': 'success', 'message': '資材が更新されました。', 'material': material.to_dict()}), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error editing material: {e}")
-        return jsonify({'status': 'error', 'message': '端材の更新に失敗しました。'}), 500
+        return jsonify({'status': 'error', 'message': '資材の更新に失敗しました。'}), 500
 
 @materials_bp.route('/delete_material_ajax/<int:material_id>', methods=['POST'])
 @login_required
@@ -691,11 +720,11 @@ def delete_material_ajax(material_id):
     
         db.session.delete(material)
         db.session.commit()
-        return jsonify({'status': 'success', 'message': '端材が削除されました。'}), 200
+        return jsonify({'status': 'success', 'message': '資材が削除されました。'}), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error deleting material: {e}")
-        return jsonify({'status': 'error', 'message': '端材の削除に失敗しました。'}), 500
+        return jsonify({'status': 'error', 'message': '資材の削除に失敗しました。'}), 500
 
 @materials_bp.route("/material_wanted_list", methods=['GET', 'POST'])
 @login_required
@@ -703,14 +732,14 @@ def material_wanted_list():
     delete_form = DeleteHistoryForm()  # DeleteHistoryFormのインスタンスを作成
 
     try:
-        # マッチしていない希望端材の取得
+        # マッチしていない希望資材の取得
         unmatched_wanted_materials = WantedMaterial.query.filter(
             WantedMaterial.user_id == current_user.id,  # 現在のユーザーが所有者
             WantedMaterial.matched == False,
             WantedMaterial.deleted == False  # 削除済みでないもののみ
         ).all()
 
-        # マッチしているが未完了の希望端材の取得
+        # マッチしているが未完了の希望資材の取得
         matched_uncompleted_wanted_materials = db.session.query(WantedMaterial, Request).join(
             Request, Request.wanted_material_id == WantedMaterial.id
         ).filter(
@@ -720,7 +749,7 @@ def material_wanted_list():
             WantedMaterial.deleted == False  # 削除済みでないもののみ
         ).all()
 
-        # 完了済みの希望端材の取得
+        # 完了済みの希望資材の取得
         completed_wanted_materials = WantedMaterial.query.filter(
             WantedMaterial.user_id == current_user.id,  # 現在のユーザーが所有者
             WantedMaterial.completed == True,
@@ -734,8 +763,8 @@ def material_wanted_list():
 
         log_user_activity(
             current_user.id, 
-            '希望端材一覧表示', 
-            'ユーザーが希望端材一覧を表示しました。', 
+            '希望資材一覧表示', 
+            'ユーザーが希望資材一覧を表示しました。', 
             request.remote_addr, 
             request.user_agent.string, 
             'N/A'
@@ -748,7 +777,7 @@ def material_wanted_list():
                                delete_form=delete_form)  # フォームをテンプレートに渡す
     except Exception as e:
         current_app.logger.error(f"Error fetching wanted material list: {e}")
-        flash('希望端材一覧の取得中にエラーが発生しました。', 'danger')
+        flash('希望資材一覧の取得中にエラーが発生しました。', 'danger')
         return redirect(url_for('dashboard.dashboard_home'))
 
 @materials_bp.route("/edit_wanted_material_ajax/<int:wanted_material_id>", methods=['POST'])
@@ -860,7 +889,7 @@ def edit_wanted_material_ajax(wanted_material_id):
         current_app.logger.error(f"Error updating wanted material: {e}")
         return jsonify({'status': 'error', 'message': '希望材料情報の更新中にエラーが発生しました。'}), 500
     
-# AJAXで希望端材を削除するルート
+# AJAXで希望資材を削除するルート
 @materials_bp.route("/delete_wanted_material_ajax/<int:wanted_material_id>", methods=['POST'])
 @login_required
 def delete_wanted_material_ajax(wanted_material_id):
@@ -870,10 +899,10 @@ def delete_wanted_material_ajax(wanted_material_id):
     try:
         db.session.delete(wanted_material)
         db.session.commit()
-        return jsonify({'status': 'success', 'message': '希望端材が削除されました。'}), 200
+        return jsonify({'status': 'success', 'message': '希望資材が削除されました。'}), 200
     except Exception as e:
         logger.error(f"Error deleting wanted material: {e}")
-        return jsonify({'status': 'error', 'message': '希望端材の削除に失敗しました。'}), 500
+        return jsonify({'status': 'error', 'message': '希望資材の削除に失敗しました。'}), 500
 
 @materials_bp.route("/edit_material/<int:material_id>", methods=['GET', 'POST'])
 @login_required
@@ -886,7 +915,9 @@ def edit_material(material_id):
             return redirect(url_for('materials.material_list'))
     else:
         owner = material.owner
-        if (current_user.company_name != owner.company_name or
+        # ★ owner が存在しないケースのガード
+        if (not owner or
+            current_user.company_name != owner.company_name or
             current_user.prefecture != owner.prefecture or
             current_user.city != owner.city or
             current_user.address != owner.address):
@@ -910,7 +941,42 @@ def edit_material(material_id):
             material.size_3 = form.material_size_3.data or 0.0  # デフォルト値を設定
             material.location = location  # 受け渡し場所を設定
             material.quantity = form.quantity.data
-            # 締切日は修正不可
+            # 締切日（編集可）
+            def _parse_deadline_str(s: str):
+                if not s:
+                    return None
+                for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+                    try:
+                        return datetime.strptime(s, fmt)
+                    except ValueError:
+                        continue
+                return None
+            # フォーム or JSON から受け取る
+            dl_str = None
+            try:
+                if request.is_json:
+                    dl_str = (request.json or {}).get('deadline')
+                else:
+                    dl_str = request.form.get('deadline')
+            except Exception:
+                dl_str = None
+            if dl_str is not None:
+                new_dl = _parse_deadline_str(dl_str)
+                # ★ バリデーション: パース不可
+                if dl_str and not new_dl:
+                    flash('締切日の形式が不正です。', 'danger')
+                    return redirect(url_for('materials.material_list'))
+                if new_dl:
+                    # ★ サーバ側でも 15分刻みへ正規化（秒・マイクロ秒も0に）
+                    new_dl = new_dl.replace(second=0, microsecond=0)
+                    m = new_dl.minute % 15
+                    if m != 0:
+                        new_dl = new_dl - timedelta(minutes=m)
+                    # ★ 過去日時は不可
+                    if new_dl < datetime.now():
+                        flash('締切日は現在時刻以降を指定してください。', 'danger')
+                        return redirect(url_for('materials.material_list'))
+                material.deadline = new_dl
             material.exclude_weekends = form.exclude_weekends.data  # 新しいフィールドの更新
             material.note = form.note.data
 
@@ -947,7 +1013,6 @@ def edit_material(material_id):
     form.location.data = material.location if business_structure not in [0,1] else ""
     form.handover_location.data = material.location if business_structure in [0,1] else ""
     form.quantity.data = material.quantity
-    # 締切日は修正不可なので設定しない
     form.exclude_weekends.data = material.exclude_weekends  # 新しいフィールドの初期値設定
     form.note.data = material.note
     # 新しいカラムの初期値設定
@@ -1124,10 +1189,52 @@ def bulk_register_wanted():
                 )
                 db.session.add(new_wanted)
             db.session.commit()
-            flash('欲しい端材を一括で登録しました。', 'success')
+            flash('欲しい資材を一括で登録しました。', 'success')
             return redirect(url_for('materials.material_wanted_list'))
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Bulk wanted registration error: {e}")
             flash('一括登録中にエラーが発生しました。', 'danger')
     return render_template('bulk_register_material.html', form=form)
+
+# ────────────────────────── 資材管理ページ ────────────────────────── #
+#   * 自分が登録した “未削除” 資材のみ取得
+#   * 会社・権限チェック不要（user_id だけで十分）
+#   * DeleteHistoryForm は HTML 内の hidden_tag() 用
+@materials_bp.route('/materials_management', methods=['GET'])
+@login_required
+def materials_management():
+    """
+    資材管理（自分が登録した資材）一覧ページ
+    """
+    delete_form = DeleteHistoryForm()
+
+    # ▼ ユーザーが所属するアクティブなグループを取得
+    groups = (UserGroup.query
+              .join(GroupMembership,
+                    GroupMembership.group_id == UserGroup.id)
+              .filter(GroupMembership.user_id == current_user.id,
+                      UserGroup.deleted_at.is_(None))
+              .all())
+
+    # ▼ クエリパラメータ ?group_id= があればグループ在庫を表示
+    group_id = request.args.get("group_id", type=int)
+    if group_id:
+        materials = (Material.query.options(joinedload('owner'))
+                     .filter_by(group_id=group_id, deleted=False)
+                     .order_by(Material.created_at.desc())
+                     .all())
+    else:
+        # 自分が登録した資材
+        materials = (Material.query.options(joinedload('owner'))
+                     .filter_by(user_id=current_user.id, deleted=False)
+                     .order_by(Material.created_at.desc())
+                     .all())
+
+    return render_template(
+        'materials_management.html',
+        materials=materials,
+        delete_form=delete_form,
+        groups=groups,
+        selected_group_id=group_id
+    )

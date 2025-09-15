@@ -1,7 +1,7 @@
 # app/api/api_site.py
 
 from flask import Blueprint, request, jsonify, current_app
-from flask_login import login_required, current_user
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import Site, User
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,59 +9,42 @@ from sqlalchemy.exc import SQLAlchemyError
 api_site_bp = Blueprint('api_site', __name__, url_prefix='/api/site')
 
 @api_site_bp.route('/register', methods=['GET', 'POST'])
-@login_required
+@jwt_required()
 def register_site():
+    """
+    GET: 同じ法人に属するユーザー一覧と現在のユーザーの都道府県情報を返す。
+    POST: JSON 形式のデータを受け取り、新規の現場を登録する。
+    """
+    user_id = get_jwt_identity()
+    current_user = User.query.get(user_id)
+    if not current_user:
+        return jsonify({'success': False, 'error': 'ユーザーが見つかりません。'}), 404
+
     if request.method == 'GET':
-        """
-        現場登録に必要なデータを取得します。
-        - 同じ法人に属するユーザーのリスト（現在のユーザーを除く）
-        - 現在のユーザーの都道府県
-        """
-        try:
-            company_name = current_user.company_name
-            participants = User.query.filter(
-                User.company_name == company_name,
-                User.id != current_user.id
-            ).all()
-            participants_data = [
-                {
-                    'id': user.id,
-                    'email': user.email,
-                    'name': f"{user.first_name} {user.last_name}"
-                } for user in participants
-            ]
-
-            user_prefecture = current_user.prefecture
-
-            return jsonify({
-                'success': True,
-                'data': {
-                    'participants': participants_data,
-                    'user_prefecture': user_prefecture
-                }
-            }), 200
-
-        except SQLAlchemyError as e:
-            current_app.logger.error(f"Database error during site registration GET: {e}")
-            return jsonify({'success': False, 'message': 'データベースエラーが発生しました。'}), 500
-
-        except Exception as e:
-            current_app.logger.error(f"Unexpected error during site registration GET: {e}")
-            return jsonify({'success': False, 'message': '予期せぬエラーが発生しました。'}), 500
+        # 同じ法人に属する参加者を、現在のユーザーを除いて取得
+        company_name = current_user.company_name
+        participants = User.query.filter(
+            User.company_name == company_name,
+            User.id != current_user.id
+        ).all()
+        # シリアライズ（必要な情報だけ）
+        participants_list = [{
+            'id': user.id,
+            'email': user.email,
+            'prefecture': user.prefecture,
+            'city': user.city,
+            'company_name': user.company_name
+        } for user in participants]
+        return jsonify({
+            'success': True,
+            'data': {
+                'participants': participants_list,
+                'user_prefecture': current_user.prefecture
+            }
+        }), 200
 
     elif request.method == 'POST':
-        """
-        新しい現場を登録します。
-        JSON形式で以下のデータを受け取ります。
-        - site_prefecture: 現場の都道府県
-        - site_city: 現場の市
-        - site_address: 現場の住所
-        - participants: 参加者のユーザーIDリスト（任意）
-        """
         try:
-            if not request.is_json:
-                return jsonify({'success': False, 'message': 'JSON形式のデータを送信してください。'}), 400
-
             data = request.get_json()
             site_prefecture = data.get('site_prefecture', '').strip()
             site_city = data.get('site_city', '').strip()
@@ -70,13 +53,13 @@ def register_site():
 
             # バリデーション
             if not site_prefecture:
-                return jsonify({'success': False, 'message': '現場県を選択してください。'}), 400
+                return jsonify({'success': False, 'error': '現場県を選択してください。'}), 400
             if not site_city:
-                return jsonify({'success': False, 'message': '市を入力してください。'}), 400
+                return jsonify({'success': False, 'error': '市を入力してください。'}), 400
             if not site_address:
-                return jsonify({'success': False, 'message': 'それ以降の住所を入力してください。'}), 400
+                return jsonify({'success': False, 'error': 'それ以降の住所を入力してください。'}), 400
 
-            # 住所の重複チェック（同じ法人内での都道府県、市、住所の組み合わせ）
+            # 住所の重複チェック（同じ法人内での組み合わせ）
             existing_site = Site.query.join(User).filter(
                 Site.site_prefecture == site_prefecture,
                 Site.site_city == site_city,
@@ -84,17 +67,17 @@ def register_site():
                 User.company_name == current_user.company_name
             ).first()
             if existing_site:
-                return jsonify({'success': False, 'message': 'この住所は既に登録されています。'}), 400
+                return jsonify({'success': False, 'error': 'この住所は既に登録されています。'}), 400
 
-            # 参加者の検証（任意）
+            # 参加者の検証（存在するユーザーかどうかをチェック）
             if participant_ids:
                 participants = User.query.filter(User.id.in_(participant_ids)).all()
                 if len(participants) != len(participant_ids):
-                    return jsonify({'success': False, 'message': '選択された参加者に無効なユーザーが含まれています。'}), 400
+                    return jsonify({'success': False, 'error': '選択された参加者に無効なユーザーが含まれています。'}), 400
             else:
                 participant_ids = []
 
-            # 新しいSiteオブジェクトの作成
+            # 新しい Site オブジェクトの作成
             new_site = Site(
                 registered_user_id=current_user.id,
                 site_prefecture=site_prefecture,
@@ -102,42 +85,35 @@ def register_site():
                 site_address=site_address,
                 location=f"{site_prefecture}{site_city}{site_address}",
                 registered_company=current_user.company_name,
-                participants=participant_ids  # participantsがリストであることを前提
-                # site_created_at はデフォルトで設定されます
+                participants=participant_ids
             )
 
-            # データベースに追加
             db.session.add(new_site)
             db.session.commit()
 
-            # アクティビティログの記録（必要に応じて実装）
-            # log_user_activity(...)
-
-            return jsonify({'success': True, 'message': '現場が正常に登録されました。'}), 201
+            return jsonify({'success': True}), 200
 
         except SQLAlchemyError as e:
             db.session.rollback()
-            current_app.logger.error(f"Database error during site registration POST: {e}")
-            return jsonify({'success': False, 'message': 'データベースエラーが発生しました。'}), 500
+            current_app.logger.error(f"Database error: {e}")
+            return jsonify({'success': False, 'error': 'データベースエラーが発生しました。'}), 500
 
         except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Unexpected error during site registration POST: {e}")
-            return jsonify({'success': False, 'message': '予期せぬエラーが発生しました。'}), 500
+            current_app.logger.error(f"Unexpected error: {e}")
+            return jsonify({'success': False, 'error': '予期せぬエラーが発生しました。'}), 500
+
 
 @api_site_bp.route('/check_address', methods=['POST'])
-@login_required
+@jwt_required()
 def check_address():
     """
-    指定された住所が既に登録されているかを確認します。
-    JSON形式で以下のデータを受け取ります。
-    - site_prefecture: 現場の都道府県
-    - site_city: 現場の市
-    - site_address: 現場の住所
+    POST: JSON形式で送信された現場の住所（県、市、以降の住所）に対して、同一法人内での重複があるかチェックする。
     """
     try:
-        if not request.is_json:
-            return jsonify({'success': False, 'message': 'JSON形式のデータを送信してください。'}), 400
+        user_id = get_jwt_identity()
+        current_user = User.query.get(user_id)
+        if not current_user:
+            return jsonify({'success': False, 'error': 'ユーザーが見つかりません。'}), 404
 
         data = request.get_json()
         site_prefecture = data.get('site_prefecture', '').strip()
@@ -145,9 +121,8 @@ def check_address():
         site_address = data.get('site_address', '').strip()
 
         if not site_prefecture or not site_city or not site_address:
-            return jsonify({'success': False, 'message': '現場県、市、住所をすべて入力してください。'}), 400
+            return jsonify({'success': False, 'error': '現場県、市、住所をすべて入力してください。'}), 400
 
-        # 住所の重複チェック（同じ法人内での都道府県、市、住所の組み合わせ）
         existing_site = Site.query.join(User).filter(
             Site.site_prefecture == site_prefecture,
             Site.site_city == site_city,
@@ -162,49 +137,37 @@ def check_address():
 
     except SQLAlchemyError as e:
         current_app.logger.error(f"Database error during address check: {e}")
-        return jsonify({'success': False, 'message': 'データベースエラーが発生しました。'}), 500
+        return jsonify({'success': False, 'error': 'データベースエラーが発生しました。'}), 500
 
     except Exception as e:
         current_app.logger.error(f"Unexpected error during address check: {e}")
-        return jsonify({'success': False, 'message': '予期せぬエラーが発生しました。'}), 500
+        return jsonify({'success': False, 'error': '予期せぬエラーが発生しました。'}), 500
 
-@api_site_bp.route('/user_sites', methods=['GET'])
-@login_required
+
+@api_site_bp.route('/get_user_sites', methods=['GET'])
+@jwt_required()
 def get_user_sites():
     """
-    現在のユーザーに関連する現場の一覧を取得します。
+    GET: 現在のユーザーが登録した、または参加者に含まれる現場の住所一覧を返す。
     """
     try:
-        # 現在のユーザーが登録した現場、または参加者として登録されている現場を取得
+        user_id = get_jwt_identity()
+        current_user = User.query.get(user_id)
+        if not current_user:
+            return jsonify({'success': False, 'error': 'ユーザーが見つかりません。'}), 404
+
         sites = Site.query.filter(
-            (Site.registered_user_id == current_user.id) | (Site.participants.contains([current_user.id]))
+            (Site.registered_user_id == current_user.id) |
+            (Site.participants.contains([current_user.id]))
         ).all()
-
-        site_addresses = [
-            {
-                'id': site.id,
-                'prefecture': site.site_prefecture,
-                'city': site.site_city,
-                'address': site.site_address,
-                'location': site.location,
-                'registered_company': site.registered_company,
-                'registered_user_id': site.registered_user_id
-            } for site in sites
-        ]
-
+        site_addresses = [site.location for site in sites]
         current_app.logger.debug(f"Fetched sites for user {current_user.id}: {site_addresses}")
-
-        return jsonify({
-            'success': True,
-            'data': {
-                'sites': site_addresses
-            }
-        }), 200
+        return jsonify({'success': True, 'sites': site_addresses}), 200
 
     except SQLAlchemyError as e:
         current_app.logger.error(f"Database error fetching user sites: {e}")
-        return jsonify({'success': False, 'message': 'データベースエラーが発生しました。'}), 500
+        return jsonify({'success': False, 'error': 'データベースエラーが発生しました。'}), 500
 
     except Exception as e:
         current_app.logger.error(f"Unexpected error fetching user sites: {e}")
-        return jsonify({'success': False, 'message': '予期せぬエラーが発生しました。'}), 500
+        return jsonify({'success': False, 'error': '予期せぬエラーが発生しました。'}), 500

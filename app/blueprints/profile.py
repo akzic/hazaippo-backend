@@ -6,6 +6,7 @@ from app.forms import EditProfileForm
 from app.models import User
 from flask_login import login_required, current_user, login_user
 from app.blueprints.utils import log_user_activity
+from app.forms import DeleteAccountForm
 
 profile = Blueprint('profile', __name__)
 
@@ -26,7 +27,8 @@ def user_profile(user_id):
 @profile.route("/profile", methods=['GET'])
 @login_required
 def view_profile():
-    return render_template('profile.html')
+    delete_form = DeleteAccountForm()  # フォームをインスタンス化
+    return render_template('profile.html', form=delete_form)
 
 @profile.route("/edit_profile", methods=['GET', 'POST'])
 @login_required

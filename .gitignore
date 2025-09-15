@@ -1,16 +1,16 @@
-# Python関連
+[ -f .gitignore ] || cat > .gitignore <<'EOF'
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-env/
+.venv/
 venv/
-
-# OS生成ファイル
+.env
+.env.*
+instance/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
 .DS_Store
-
-# ログ・一時ファイル
-logs/
-*.log
-
-# その他（必要に応じて追加）
+EOF

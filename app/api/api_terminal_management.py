@@ -1,36 +1,95 @@
 # app/api/api_terminal_management.py
 
 from flask import Blueprint, request, jsonify, current_app
-from flask_login import login_required, current_user
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
-from app.models import Terminal, Room, Reservation, Lecture, Material, User, WorkingHours
+from app.models import Terminal, Room, Reservation, Material, User
 from sqlalchemy.exc import SQLAlchemyError
-import logging
 from datetime import datetime, timedelta, time
 import pytz
+import logging
 
 api_terminal_management_bp = Blueprint('api_terminal_management', __name__, url_prefix='/api/terminal_management')
-
 JST = pytz.timezone('Asia/Tokyo')
-
-# ロガーの設定
 logger = logging.getLogger(__name__)
 
-@api_terminal_management_bp.route('/reservations', methods=['GET'])
-@login_required
-def get_reservations():
+
+def get_current_user():
     """
-    ターミナルに関連する全ての予約を取得します。
-    クエリパラメータで日付と部屋IDを指定可能。
+    JWT からユーザーIDを取得し、DB からユーザーをロードするヘルパー関数
     """
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    return user
+
+
+# １．ターミナル予約管理（画面表示相当の情報を JSON で返す）
+@api_terminal_management_bp.route('/reservation/management', methods=['GET'])
+@jwt_required()
+def reservation_management():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'success': False, 'error': 'ユーザーが見つかりません。'}), 404
+
+    if not current_user.affiliated_terminal_id:
+        return jsonify({'success': False, 'error': 'あなたには紐づいたターミナルがありません。'}), 400
+
+    terminal = Terminal.query.get(current_user.affiliated_terminal_id)
+    if not terminal:
+        return jsonify({'success': False, 'error': '紐づいたターミナルが見つかりません。'}), 404
+
+    # 指定ターミナルの部屋を取得
+    rooms = Room.query.filter_by(terminal_id=terminal.id).all()
+    rooms_data = [{
+        'id': room.id,
+        'name': room.name  # ※ 必要に応じて他の情報も追加
+    } for room in rooms]
+
+    today = datetime.now(JST).date()
+    min_date = today.strftime('%Y-%m-%d')
+    max_date = (today + timedelta(days=30)).strftime('%Y-%m-%d')
+    date_options = [(today + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(31)]
+
+    # 空のスケジュール（9:00～22:00、各1時間枠）
+    schedule = []
+    for hour in range(9, 22):
+        time_slot = f"{hour:02d}:00 ~ {hour+1:02d}:00"
+        schedule.append({
+            'time': time_slot,
+            'user_name': None,
+            'lecturer_name': None,
+            'reservation_id': None
+        })
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'rooms': rooms_data,
+            'schedule': schedule,
+            'today': today.strftime('%Y-%m-%d'),
+            'min_date': min_date,
+            'max_date': max_date,
+            'date_options': date_options
+        }
+    }), 200
+
+
+# ２．APIエンドポイント: スケジュール取得（部屋・日付指定）
+@api_terminal_management_bp.route('/get_schedule', methods=['GET'])
+@jwt_required()
+def get_schedule():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'status': 'error', 'message': 'ユーザーが見つかりません。'}), 404
+
     room_id = request.args.get('room_id')
     date_str = request.args.get('date')
 
     if not room_id or not date_str:
-        return jsonify({'status': 'error', 'message': 'room_id と date を指定してください。'}), 400
+        return jsonify({'status': 'error', 'message': '部屋と日付を指定してください。'}), 400
 
     try:
-        date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'status': 'error', 'message': '日付の形式が正しくありません。'}), 400
 
@@ -38,19 +97,19 @@ def get_reservations():
     if not room or room.terminal_id != current_user.affiliated_terminal_id:
         return jsonify({'status': 'error', 'message': '部屋が見つからないか、アクセス権がありません。'}), 404
 
-    # 指定された部屋と日にちの予約を取得（9:00～22:00）
+    # 9:00～22:00の予約を取得
     reservations = Reservation.query.filter(
         Reservation.room_id == room_id,
-        Reservation.date == date,
+        Reservation.date == target_date,
         Reservation.canceled == False,
         Reservation.start_time >= time(9, 0),
         Reservation.start_time < time(23, 0)
     ).all()
 
-    # スケジュールを初期化
+    # スケジュールの初期化（9:00～22:00の1時間枠）
     schedule = []
     for hour in range(9, 23):
-        time_slot = f"{hour:02d}:00 ~ {hour + 1:02d}:00"
+        time_slot = f"{hour:02d}:00 ~ {hour+1:02d}:00"
         schedule.append({
             'time': time_slot,
             'user_name': None,
@@ -63,18 +122,21 @@ def get_reservations():
         if 9 <= start_hour < 22:
             index = start_hour - 9
             schedule[index]['user_name'] = reservation.user.contact_name
-            schedule[index]['lecturer_name'] = reservation.lecturer.contact_name if reservation.lecturer else 'レクチャー担当なし'
+            schedule[index]['lecturer_name'] = (reservation.lecturer.contact_name 
+                                                  if reservation.lecturer else 'レクチャー担当なし')
             schedule[index]['reservation_id'] = reservation.id
 
     return jsonify({'status': 'success', 'schedule': schedule}), 200
 
 
-@api_terminal_management_bp.route('/reservations/<int:reservation_id>', methods=['DELETE'])
-@login_required
+# ３．APIエンドポイント: 予約削除
+@api_terminal_management_bp.route('/delete_reservation/<int:reservation_id>', methods=['DELETE'])
+@jwt_required()
 def delete_reservation(reservation_id):
-    """
-    指定された予約を削除（キャンセル）します。
-    """
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'status': 'error', 'message': 'ユーザーが見つかりません。'}), 404
+
     reservation = Reservation.query.get(reservation_id)
     if not reservation:
         return jsonify({'status': 'error', 'message': '指定された予約が見つかりません。'}), 404
@@ -85,243 +147,133 @@ def delete_reservation(reservation_id):
     try:
         reservation.canceled = True
         db.session.commit()
-
-        # 予約削除時のメール通知（必要に応じて）
-        # send_cancel_reservation_email(reservation)
-
-        logger.info(f"予約ID {reservation_id} がユーザーID {current_user.id} によってキャンセルされました。")
         return jsonify({'status': 'success', 'message': '予約が削除されました。'}), 200
-
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        logger.error(f"予約削除中にデータベースエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '予約の削除中にデータベースエラーが発生しました。'}), 500
-
     except Exception as e:
         db.session.rollback()
-        logger.error(f"予約削除中に予期せぬエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '予約の削除中に予期せぬエラーが発生しました。'}), 500
+        logger.error(f"予約削除中にエラーが発生しました: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': '予約の削除中にエラーが発生しました。'}), 500
 
 
-@api_terminal_management_bp.route('/materials', methods=['GET', 'POST'])
-@login_required
-def manage_materials():
-    """
-    ターミナルに関連する端材の管理を行います。
-    GET: 端材の一覧を取得。
-    POST: 新しい端材を追加または既存の端材を編集。
-    """
+# ４．ターミナル資材管理：登録済み材料一覧の取得
+@api_terminal_management_bp.route('/material/management', methods=['GET'])
+@jwt_required()
+def terminal_material_management():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'success': False, 'error': 'ユーザーが見つかりません。'}), 404
+
     if current_user.affiliated_terminal_id is None:
-        return jsonify({'status': 'error', 'message': 'あなたには紐づいたターミナルがありません。'}), 403
+        return jsonify({'success': False, 'error': 'あなたには紐づいたターミナルがありません。'}), 400
 
     terminal = Terminal.query.get(current_user.affiliated_terminal_id)
     if not terminal:
-        return jsonify({'status': 'error', 'message': '紐づいたターミナルが見つかりません。'}), 404
+        return jsonify({'success': False, 'error': '紐づいたターミナルが見つかりません。'}), 404
 
-    if request.method == 'GET':
-        try:
-            # ターミナルに所属するユーザーのIDを取得
-            affiliated_users = User.query.filter_by(affiliated_terminal_id=terminal.id).all()
-            affiliated_user_ids = [user.id for user in affiliated_users]
+    # 同一ターミナルに紐づくユーザーの ID を取得
+    affiliated_users = User.query.filter_by(affiliated_terminal_id=terminal.id).all()
+    affiliated_user_ids = [user.id for user in affiliated_users]
 
-            # 端材を取得
-            materials = Material.query.filter(Material.user_id.in_(affiliated_user_ids)).all()
+    # 資材はこれらのユーザーが登録したもの
+    materials = Material.query.filter(Material.user_id.in_(affiliated_user_ids)).all()
+    materials_data = []
+    for material in materials:
+        materials_data.append({
+            'id': material.id,
+            'type': material.type,
+            'quantity': material.quantity,
+            'size_1': material.size_1,
+            'size_2': material.size_2,
+            'size_3': material.size_3,
+            'location': material.location,
+            'note': material.note,
+            'user_id': material.user_id
+        })
 
-            materials_data = [
-                {
-                    'id': material.id,
-                    'type': material.type,
-                    'quantity': material.quantity,
-                    'size_1': material.size_1,
-                    'size_2': material.size_2,
-                    'size_3': material.size_3,
-                    'location': material.location,
-                    'note': material.note,
-                    'user_id': material.user_id,
-                    'user_email': material.user.email
-                } for material in materials
-            ]
-
-            return jsonify({'status': 'success', 'materials': materials_data}), 200
-
-        except SQLAlchemyError as e:
-            logger.error(f"端材取得中にデータベースエラーが発生しました: {e}")
-            return jsonify({'status': 'error', 'message': '端材取得中にデータベースエラーが発生しました。'}), 500
-
-        except Exception as e:
-            logger.error(f"端材取得中に予期せぬエラーが発生しました: {e}")
-            return jsonify({'status': 'error', 'message': '端材取得中に予期せぬエラーが発生しました。'}), 500
-
-    elif request.method == 'POST':
-        """
-        端材の追加または編集を行います。
-        JSON形式で以下のデータを受け取ります。
-        - action: 'add' または 'edit'
-        - material_id: 編集する場合に必要
-        - type, quantity, size_1, size_2, size_3: 端材の詳細
-        - location, note: オプショナル
-        """
-        try:
-            if not request.is_json:
-                return jsonify({'status': 'error', 'message': 'JSON形式のデータを送信してください。'}), 400
-
-            data = request.get_json()
-            action = data.get('action')
-            type_ = data.get('type')
-            quantity = data.get('quantity')
-            size_1 = data.get('size_1')
-            size_2 = data.get('size_2')
-            size_3 = data.get('size_3')
-            location = data.get('location', '').strip()
-            note = data.get('note', '').strip()
-
-            if action not in ['add', 'edit']:
-                return jsonify({'status': 'error', 'message': '有効なアクションを指定してください。'}), 400
-
-            # バリデーション
-            if not all([type_, quantity, size_1, size_2, size_3]):
-                return jsonify({'status': 'error', 'message': 'type, quantity, size_1, size_2, size_3 は必須フィールドです。'}), 400
-
-            if not isinstance(quantity, int) or quantity <= 0:
-                return jsonify({'status': 'error', 'message': 'quantity は正の整数でなければなりません。'}), 400
-
-            if not all(isinstance(s, (int, float)) for s in [size_1, size_2, size_3]):
-                return jsonify({'status': 'error', 'message': 'size_1, size_2, size_3 は数値でなければなりません。'}), 400
-
-            if action == 'add':
-                # 新しい端材の作成
-                new_material = Material(
-                    user_id=current_user.id,
-                    type=type_,
-                    quantity=quantity,
-                    size_1=size_1,
-                    size_2=size_2,
-                    size_3=size_3,
-                    location=location if location else None,
-                    note=note if note else None
-                )
-                db.session.add(new_material)
-                db.session.commit()
-
-                logger.info(f"ユーザーID {current_user.id} によって端材ID {new_material.id} が追加されました。")
-                return jsonify({'status': 'success', 'message': '端材が正常に追加されました。'}), 201
-
-            elif action == 'edit':
-                material_id = data.get('material_id')
-                if not material_id:
-                    return jsonify({'status': 'error', 'message': 'material_id が必要です。'}), 400
-
-                material = Material.query.get(material_id)
-                if not material:
-                    return jsonify({'status': 'error', 'message': '指定された端材が見つかりません。'}), 404
-
-                if not (material.user_id == current_user.id or current_user.is_terminal_admin):
-                    return jsonify({'status': 'error', 'message': 'この端材を編集する権限がありません。'}), 403
-
-                # 更新
-                material.type = type_
-                material.quantity = quantity
-                material.size_1 = size_1
-                material.size_2 = size_2
-                material.size_3 = size_3
-                material.location = location if location else material.location
-                material.note = note if note else material.note
-
-                db.session.commit()
-
-                logger.info(f"端材ID {material_id} がユーザーID {current_user.id} によって編集されました。")
-                return jsonify({'status': 'success', 'message': '端材が正常に更新されました。'}), 200
-
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            logger.error(f"端材管理中にデータベースエラーが発生しました: {e}")
-            return jsonify({'status': 'error', 'message': '端材管理中にデータベースエラーが発生しました。'}), 500
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"端材管理中に予期せぬエラーが発生しました: {e}")
-            return jsonify({'status': 'error', 'message': '端材管理中に予期せぬエラーが発生しました。'}), 500
+    return jsonify({
+        'success': True,
+        'data': {
+            'materials': materials_data,
+            'terminal_name': terminal.name,
+            'is_admin': current_user.is_terminal_admin
+        }
+    }), 200
 
 
-@api_terminal_management_bp.route('/materials/<int:material_id>', methods=['DELETE'])
-@login_required
-def delete_material(material_id):
-    """
-    指定された端材を削除します。
-    """
+# ５．APIエンドポイント: 資材削除
+@api_terminal_management_bp.route('/material/delete', methods=['POST'])
+@jwt_required()
+def delete_material():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'status': 'error', 'message': 'ユーザーが見つかりません。'}), 404
+
+    data = request.get_json()
+    material_id = data.get('material_id')
+    if not material_id:
+        return jsonify({'status': 'error', 'message': 'material_id を指定してください。'}), 400
+
     material = Material.query.get(material_id)
     if not material:
-        return jsonify({'status': 'error', 'message': '指定された端材が見つかりません。'}), 404
+        return jsonify({'status': 'error', 'message': '指定された資材が見つかりません。'}), 404
 
+    # 資材の編集・削除は登録ユーザーまたはターミナル管理者のみ可能
     if not (material.user_id == current_user.id or current_user.is_terminal_admin):
-        return jsonify({'status': 'error', 'message': 'この端材を削除する権限がありません。'}), 403
+        return jsonify({'status': 'error', 'message': 'この資材を削除する権限がありません。'}), 403
 
     try:
         db.session.delete(material)
         db.session.commit()
-
-        logger.info(f"端材ID {material_id} がユーザーID {current_user.id} によって削除されました。")
-        return jsonify({'status': 'success', 'message': '端材が削除されました。'}), 200
-
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        logger.error(f"端材削除中にデータベースエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '端材削除中にデータベースエラーが発生しました。'}), 500
-
+        return jsonify({'status': 'success', 'message': '資材が削除されました。'}), 200
     except Exception as e:
         db.session.rollback()
-        logger.error(f"端材削除中に予期せぬエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '端材削除中に予期せぬエラーが発生しました。'}), 500
+        logger.error(f"資材削除中にエラーが発生しました: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': '資材の削除中にエラーが発生しました。'}), 500
 
 
-@api_terminal_management_bp.route('/schedule', methods=['GET'])
-@login_required
-def get_schedule_api():
-    """
-    指定された部屋と日にちのスケジュールを取得します。
-    クエリパラメータで room_id と date を指定。
-    """
-    room_id = request.args.get('room_id')
-    date_str = request.args.get('date')
+# ６．APIエンドポイント: 資材更新
+@api_terminal_management_bp.route('/material/update/<int:material_id>', methods=['POST'])
+@jwt_required()
+def update_material(material_id):
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'status': 'error', 'message': 'ユーザーが見つかりません。'}), 404
 
-    if not room_id or not date_str:
-        return jsonify({'status': 'error', 'message': 'room_id と date を指定してください。'}), 400
+    material = Material.query.get(material_id)
+    if not material:
+        return jsonify({'status': 'error', 'message': '指定された資材が見つかりません。'}), 404
+
+    if not (material.user_id == current_user.id or current_user.is_terminal_admin):
+        return jsonify({'status': 'error', 'message': 'この資材を編集する権限がありません。'}), 403
+
+    data = request.get_json()
+    action = data.get('action')
+    if action != 'edit':
+        return jsonify({'status': 'error', 'message': '無効なアクションです。'}), 400
+
+    # 必須フィールドのチェック
+    required_fields = ['type', 'quantity', 'size_1', 'size_2', 'size_3']
+    missing_fields = [field for field in required_fields if not data.get(field)]
+    if missing_fields:
+        return jsonify({'status': 'error', 
+                        'message': f'すべての必須フィールドを入力してください。欠落フィールド: {", ".join(missing_fields)}'}), 400
 
     try:
-        date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        material.type = data.get('type')
+        material.quantity = int(data.get('quantity'))
+        material.size_1 = data.get('size_1')
+        material.size_2 = data.get('size_2')
+        material.size_3 = data.get('size_3')
+        # location, note はオプション。入力があれば更新
+        if data.get('location'):
+            material.location = data.get('location')
+        if data.get('note'):
+            material.note = data.get('note')
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': '資材が更新されました。'}), 200
     except ValueError:
-        return jsonify({'status': 'error', 'message': '日付の形式が正しくありません。'}), 400
-
-    room = Room.query.get(room_id)
-    if not room or room.terminal_id != current_user.affiliated_terminal_id:
-        return jsonify({'status': 'error', 'message': '部屋が見つからないか、アクセス権がありません。'}), 404
-
-    # 指定された部屋と日にちの予約を取得（9:00～22:00）
-    reservations = Reservation.query.filter(
-        Reservation.room_id == room_id,
-        Reservation.date == date,
-        Reservation.canceled == False,
-        Reservation.start_time >= time(9, 0),
-        Reservation.start_time < time(23, 0)
-    ).all()
-
-    # スケジュールを初期化
-    schedule = []
-    for hour in range(9, 23):
-        time_slot = f"{hour:02d}:00 ~ {hour + 1:02d}:00"
-        schedule.append({
-            'time': time_slot,
-            'user_name': None,
-            'lecturer_name': None,
-            'reservation_id': None
-        })
-
-    for reservation in reservations:
-        start_hour = reservation.start_time.hour
-        if 9 <= start_hour < 22:
-            index = start_hour - 9
-            schedule[index]['user_name'] = reservation.user.contact_name
-            schedule[index]['lecturer_name'] = reservation.lecturer.contact_name if reservation.lecturer else 'レクチャー担当なし'
-            schedule[index]['reservation_id'] = reservation.id
-
-    return jsonify({'status': 'success', 'schedule': schedule}), 200
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': '数量は数値でなければなりません。'}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"資材更新中にエラーが発生しました: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': '資材の更新中にエラーが発生しました。'}), 500

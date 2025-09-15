@@ -1,0 +1,28 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.zai.hazaippo",
+      "sha256_cert_fingerprints": [
+        "33:1E:34:E5:CA:31:44:85:60:CE:8A:63:BD:30:47:48:51:B7:BF:3B:9F:83:0E:AA:F2:34:65:87:DD:8D:3F:06"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.hazaippo.app",
+      "sha256_cert_fingerprints": [
+        "CB:66:87:1A:34:DD:69:A1:7F:90:EC:55:85:D0:B7:C4:47:BF:18:6B:73:F5:D2:36:98:1E:4A:8C:8D:E3:6C:9E"
+      ]
+    }
+  }
+]

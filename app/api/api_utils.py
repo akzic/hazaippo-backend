@@ -6,6 +6,7 @@ from app import db
 from app.models import Log
 from sqlalchemy.exc import SQLAlchemyError
 import logging
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 api_utils_bp = Blueprint('api_utils', __name__, url_prefix='/api/utils')
 
@@ -14,33 +15,22 @@ logger = logging.getLogger(__name__)
 
 
 @api_utils_bp.route('/log_activity', methods=['POST'])
-@login_required
+@jwt_required()
 def log_activity():
-    """
-    ユーザーの活動をログとして記録します。
-    リクエストボディ例:
-    {
-        "action": "update_profile",
-        "details": "ユーザープロファイルを更新しました。",
-        "ip_address": "192.168.1.1",
-        "device_info": "Chrome on Windows 10",
-        "location": "Tokyo"
-    }
-    """
     data = request.get_json()
-
     action = data.get('action')
     details = data.get('details')
     ip_address = data.get('ip_address')
     device_info = data.get('device_info')
-    location = data.get('location', 'N/A')  # デフォルト値
+    location = data.get('location', 'N/A')
 
     if not action or not details or not ip_address or not device_info:
         return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
 
     try:
+        user_id = get_jwt_identity()
         log_entry = Log(
-            user_id=current_user.id,
+            user_id=user_id,
             action=action,
             details=details,
             ip_address=ip_address,

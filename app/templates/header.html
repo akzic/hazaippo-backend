@@ -12,20 +12,20 @@
             
             <ul class="nav-links left">
                 <li class="dropdown">
-                    <a href="#">端材検索</a>
+                    <a href="#">資材検索</a>
                     <div class="dropdown-content">
-                        <a href="{{ url_for('search.search_materials') }}">欲しい端材を検索</a>
+                        <a href="{{ url_for('search.search_materials') }}">欲しい資材を検索</a>
                         <a href="{{ url_for('search.search_wanted_materials') }}">材料を必要としている人を検索</a>
                     </div>
                 </li>
                 <li class="dropdown">
-                    <a href="#">端材登録</a>
+                    <a href="#">資材登録</a>
                     <div class="dropdown-content">
-                        <a href="{{ url_for('materials.register_material') }}">提供する端材登録</a>
-                        <a href="{{ url_for('materials.register_wanted') }}">欲しい端材登録</a>
+                        <a href="{{ url_for('materials.register_material') }}">提供する資材登録</a>
+                        <a href="{{ url_for('materials.register_wanted') }}">欲しい資材登録</a>
                     </div>
                 </li>
-                <li><a href="{{ url_for('materials.material_list') }}">端材一覧</a></li>
+                <li><a href="{{ url_for('materials.material_list') }}">資材一覧</a></li>
 
                 <!-- ターミナルメニューの修正 -->
                 <li class="dropdown">
@@ -49,7 +49,7 @@
                         <a href="#">ターミナル管理</a>
                         <div class="dropdown-content">
                             <a href="{{ url_for('terminal_management.terminal_reservation_management') }}">ターミナル予約確認</a>
-                            <a href="{{ url_for('terminal_management.terminal_material_management') }}">ターミナル端材管理</a>
+                            <a href="{{ url_for('terminal_management.terminal_material_management') }}">ターミナル資材管理</a>
                         </div>
                     </li>
                 {% endif %}
@@ -58,10 +58,12 @@
         
         <ul class="nav-links right">
             <!-- 会社名と担当者名を表示 -->
-            {% if g.company_name and g.contact_name %}
+            {% if current_user.is_authenticated
+                and (current_user.company_name|trim)|length
+                and (current_user.contact_name|trim)|length %}
                 <li class="dropdown">
-                    <a href="#">
-                        {{ g.company_name }}：{{ g.contact_name }}様
+                    <a href="#" aria-label="アカウントメニュー">
+                        {{ current_user.company_name }}：{{ current_user.contact_name }}様
                         <span class="notification-badge" id="company-notification" style="display: none;"></span>
                     </a>
                     <div class="dropdown-content">

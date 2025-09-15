@@ -94,7 +94,7 @@ $(document).ready(function(){
     // 初期ロード時にフィールドの表示を設定
     toggleFields();
 
-    // 端材の種類が変更されたときにフィールドの表示を切り替える
+    // 資材の種類が変更されたときにフィールドの表示を切り替える
     $('#material_type').change(function(){
         toggleFields();
     });

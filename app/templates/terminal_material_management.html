@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ターミナル端材管理（{{ terminal_name }}) | はざいっぽ</title>
+    <title>ターミナル資材管理（{{ terminal_name }}) | はざいっぽ</title>
     <link rel="stylesheet" href="/static/css/terminal_material_management.css">
     <script src="/static/js/terminal_material_management.js"></script>
     <style>
@@ -35,11 +35,11 @@
 </head>
 <body>
     {% include 'header.html' %}
-    <h1>ターミナル端材管理（{{ terminal_name }})</h1>
+    <h1>ターミナル資材管理（{{ terminal_name }})</h1>
     <main>
-        <!-- ターミナル管理者に紐づいた端材リスト -->
+        <!-- ターミナル管理者に紐づいた資材リスト -->
         <section id="material-list">
-            <h2>端材リスト</h2>
+            <h2>資材リスト</h2>
             <table>
                 <thead>
                     <tr>
@@ -85,7 +85,7 @@
     <script>
         function manageStock(materialId) {
             // 在庫管理の処理を実装
-            alert('在庫管理機能が呼び出されました。端材ID: ' + materialId);
+            alert('在庫管理機能が呼び出されました。資材ID: ' + materialId);
         }
 
         function editRow(button) {
@@ -196,12 +196,12 @@
 
                     alert(data.message);
                 } else {
-                    alert(`端材の更新に失敗しました: ${data.message}`);
+                    alert(`資材の更新に失敗しました: ${data.message}`);
                 }
             })
             .catch(error => {
                 console.error('Error updating material:', error);
-                alert('端材の更新中にエラーが発生しました。');
+                alert('資材の更新中にエラーが発生しました。');
             });
         }
 

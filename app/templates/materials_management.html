@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>端材管理</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/materials_management.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="display:inline-block;">資材管理</h1>
+
+            <!-- ★ 戻るボタン（dashboard へ） -->
+            <a href="{{ url_for('dashboard.dashboard_home') }}"  {# ← ルート名は環境に合わせて #}
+               class="btn btn-secondary"
+               style="margin-left:1.5rem; vertical-align:middle;">
+                戻る
+            </a>
+            <!-- ▼ グループ在庫フィルター -->
+            <select id="group-filter"
+                    data-base-url="{{ url_for('materials.materials_management') }}"
+                    style="margin-left:1rem; padding:4px 8px;">
+                <option value="">自分の端材</option>
+                {% for g in groups %}
+                <option value="{{ g.id }}"
+                        {% if g.id == selected_group_id %}selected{% endif %}>
+                    {{ g.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="table-container">
+            <table id="materials-table">
+                <thead>
+                    <tr>
+                        <th>種類</th>
+                        <th>材種</th>
+                        {% if current_user.business_structure in [0, 1] %}
+                        <th>登録者</th>
+                        {% endif %}
+                        <th>数量</th>
+                        <th>サイズ</th>
+                        <th>場所</th>
+                        <th>登録日</th>
+                        <th>締切日</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for material in materials %}
+                    <tr data-material-id="{{ material.id }}" data-deadline="{{ material.deadline.isoformat() if material.deadline else '' }}">
+                        <td class="type">{{ material.type }}</td>
+                        <td class="category">
+                            {% if material.type == "木材" %}
+                                {{ material.wood_type if material.wood_type != "N/A" else "" }}
+                            {% elif material.type == "ボード材" %}
+                                {{ material.board_material_type if material.board_material_type != "N/A" else "" }}
+                            {% elif material.type == "パネル材" %}
+                                {{ material.panel_type if material.panel_type != "N/A" else "" }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        {% if current_user.business_structure in [0, 1] %}
+                        <td class="registrant">{{ material.owner.contact_name if material.owner and material.owner.contact_name else "" }}</td>
+                        {% endif %}
+                        <td class="quantity">{{ material.quantity }}</td>
+                        <td class="size">
+                            {% if material.size_1 == 0 and material.size_2 == 0 and material.size_3 == 0 %}
+                                指定なし
+                            {% else %}
+                                {{ material.size_1 }} × {{ material.size_2 }} × {{ material.size_3 }}
+                            {% endif %}
+                        </td>
+                        <td class="location">
+                            {{ (material.m_prefecture|default('')) ~ ' ' ~ (material.m_city|default('')) ~ ' ' ~ (material.m_address|default('')) | trim }}
+                        </td>
+                        <td class="created_at">{{ material.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="deadline">
+                            {{ material.deadline.strftime('%Y-%m-%d %H:%M:%S') if material.deadline else '未設定' }}
+                        </td>
+                        <td class="note">{{ material.note if material.note != "N/A" else "" }}</td>
+                        <td class="action-buttons">
+                            {% if current_user.id == material.user_id %}
+                            <button class="btn btn-primary" onclick="editRow(this)">編集</button>
+                            <form class="delete-form" data-material-id="{{ material.id }}"
+                                  action="{{ url_for('materials.delete_material_ajax', material_id=material.id) }}"
+                                  method="POST" style="display:inline;">
+                                {{ delete_form.hidden_tag() }}
+                                <button type="submit" class="btn btn-danger">削除</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if current_user.business_structure in [0,1] %}10{% else %}9{% endif %}">
+                            データがありません
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ▼ 依存ゼロの JS をここに直埋め ▲ -->
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        /* ---------- グループフィルター ---------- */
+        const gf = document.getElementById("group-filter");
+        if (gf) {
+            const base = gf.dataset.baseUrl;      // ← Jinja で渡した正しい URL
+            gf.addEventListener("change", () => {
+                const gid = gf.value;
+                window.location.href = gid ? `${base}?group_id=${gid}` : base;
+            });
+        }
+
+        /* ---------- 定数 ---------- */
+        const EDIT_URL   = '/materials/edit_material_ajax/0';
+        const DELETE_URL = '/materials/delete_material_ajax/0';
+        const prefectures = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
+
+        /* ---------- 期限フォーマット補助 ---------- */
+        function isoToInput(iso){ // 'YYYY-MM-DDTHH:mm'
+            if(!iso) return '';
+            return iso.replace(' ', 'T').substring(0,16);
+        }
+        function inputToDisplay(val){ // 'YYYY-MM-DD HH:MM:SS'
+            if(!val) return '未設定';
+            return val.replace('T',' ') + ':00';
+        }
+
+        /* ---------- 行編集 ---------- */
+        window.editRow = btn => {
+            const tr = btn.closest('tr');
+            const id = tr.dataset.materialId;
+
+            // 各セル
+            const typeC = tr.querySelector('.type');
+            const catC  = tr.querySelector('.category');
+            const qtyC  = tr.querySelector('.quantity');
+            const sizeC = tr.querySelector('.size');
+            const locC  = tr.querySelector('.location');
+            const dlC   = tr.querySelector('.deadline');
+            const noteC = tr.querySelector('.note');
+            const actC  = tr.querySelector('.action-buttons');
+
+            // 現在値取得
+            const typeVal = typeC.textContent.trim();
+            const catVal  = catC.textContent.trim();
+            const qtyVal  = qtyC.textContent.trim();
+            const sizeArr = sizeC.textContent.trim()==="指定なし" ? [0,0,0] : sizeC.textContent.trim().split(' × ').map(Number);
+            const locParts= locC.textContent.trim().split(' ');
+            const pVal    = locParts[0]||"", cVal=locParts[1]||"", aVal=locParts.slice(2).join(' ');
+            const dlISO   = tr.dataset.deadline || '';
+            const noteVal = noteC.textContent.trim();
+
+            /* セル書き換え */
+            typeC.innerHTML = `
+                <select class="edit-type">
+                    <option value="">選択してください</option>
+                    ${["木材","軽量鉄骨","ボード材","パネル材","その他"]
+                      .map(t=>`<option value="${t}" ${t===typeVal?"selected":""}>${t}</option>`).join('')}
+                </select>`;
+
+            catC.innerHTML = `<select class="edit-cat"></select>`;
+
+            qtyC.innerHTML = `<input type="number" min="1" value="${qtyVal}">`;
+
+            sizeC.innerHTML = `
+                <input type="number" class="s1" min="0" step="0.1" value="${sizeArr[0]}" style="width:30%;"> ×
+                <input type="number" class="s2" min="0" step="0.1" value="${sizeArr[1]}" style="width:30%;"> ×
+                <input type="number" class="s3" min="0" step="0.1" value="${sizeArr[2]}" style="width:30%;">`;
+
+            locC.innerHTML = `
+                <select class="edit-pref">
+                    <option value="">選択してください</option>
+                    ${prefectures.map(p=>`<option value="${p}" ${p===pVal?"selected":""}>${p}</option>`).join('')}
+                </select><br>
+                <input type="text" class="edit-city" value="${cVal}" placeholder="市区町村" style="width:45%;"> 
+                <input type="text" class="edit-addr" value="${aVal}" placeholder="住所" style="width:45%;">`;
+
+            // ★ 締切日：datetime-local（15分刻み）
+            dlC.innerHTML = `
+                <input type="datetime-local" class="edit-deadline" step="900"
+                       value="${isoToInput(dlISO)}" style="width: 95%;">`;
+
+            noteC.innerHTML = `<input type="text" value="${noteVal}" style="width:95%;">`;
+
+            actC.innerHTML = `
+                <button class="btn btn-success" onclick="saveEdit(this,${id})">保存</button>
+                <button class="btn btn-secondary" onclick="location.reload()">キャンセル</button>`;
+
+            /* 材種オプション更新 */
+            const catSel = tr.querySelector('.edit-cat');
+            function setCat(t,cur=""){
+                let opts='<option value="">選択してください</option>';
+                const map={
+                    "木材":["無垢材","集成材（積層材）","広葉樹","針葉樹","ヒノキ","スギ","ヒバ","マツ（ベイマツ、アカマツ）","ケヤキ","ツガ","キリ","ホワイトウッド","ウォールナット","パイン"],
+                    "ボード材":["防火質","防塵質"],
+                    "パネル材":["床材","壁材"]
+                };
+                (map[t]||[]).forEach(c=>opts+=`<option value="${c}" ${c===cur?"selected":""}>${c}</option>`);
+                if(map[t]===undefined) opts='<option value="">選択できません</option>';
+                catSel.innerHTML=opts;
+            }
+            setCat(typeVal,catVal);
+            tr.querySelector('.edit-type').addEventListener('change',e=>setCat(e.target.value,""));
+            tr.classList.add('editable');
+        };
+
+        /* ---------- 保存 ---------- */
+        window.saveEdit = (btn,id) => {
+            const tr = btn.closest('tr');
+            const csrf = document.querySelector('meta[name="csrf-token"]').content;
+            const dlInput = tr.querySelector('.edit-deadline') ? tr.querySelector('.edit-deadline').value.trim() : '';
+            const data = {
+                type: tr.querySelector('.edit-type').value.trim(),
+                category: tr.querySelector('.edit-cat').value.trim(),
+                quantity: Number(tr.querySelector('.quantity input').value),
+                size_1: parseFloat(tr.querySelector('.s1').value||0),
+                size_2: parseFloat(tr.querySelector('.s2').value||0),
+                size_3: parseFloat(tr.querySelector('.s3').value||0),
+                m_prefecture: tr.querySelector('.edit-pref').value.trim(),
+                m_city: tr.querySelector('.edit-city').value.trim(),
+                m_address: tr.querySelector('.edit-addr').value.trim(),
+                note: tr.querySelector('.note input').value.trim(),
+                // ★ 締切日（未入力なら null）
+                deadline: dlInput || null
+            };
+
+            if(data.type==="木材"){
+                data.wood_type=data.category;
+            }
+            if(data.type==="ボード材"){
+                data.board_material_type=data.category;
+            }
+            if(data.type==="パネル材"){
+                data.panel_type=data.category;
+            }
+
+            fetch(EDIT_URL.replace('/0',`/${id}`),{
+                method:'POST',
+                headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+                body:JSON.stringify(data),
+                credentials:'same-origin'
+            })
+            .then(r=>r.ok?r.json():r.json().then(e=>Promise.reject(e.message)))
+            .then(res=>{
+                tr.querySelector('.type').textContent = res.material.type;
+                tr.querySelector('.category').textContent = res.material.wood_type||res.material.board_material_type||res.material.panel_type||"";
+                tr.querySelector('.quantity').textContent = res.material.quantity;
+                tr.querySelector('.size').textContent =
+                    (res.material.size_1===0&&res.material.size_2===0&&res.material.size_3===0)
+                    ? "指定なし"
+                    : `${res.material.size_1} × ${res.material.size_2} × ${res.material.size_3}`;
+                tr.querySelector('.location').textContent =
+                    [res.material.m_prefecture,res.material.m_city,res.material.m_address].filter(Boolean).join(' ');
+
+                // ★ 締切日 表示・data 属性更新
+                const dlFromServer = res.material.deadline || res.material.deadline_iso || null;
+                const dlDisplay = dlFromServer ? inputToDisplay(isoToInput(dlFromServer)) : inputToDisplay(dlInput);
+                tr.querySelector('.deadline').textContent = dlDisplay;
+                tr.dataset.deadline = dlFromServer ? isoToInput(dlFromServer) + ':00' : (dlInput ? dlInput + ':00' : '');
+
+                tr.querySelector('.note').textContent = res.material.note||"";
+                tr.querySelector('.action-buttons').innerHTML = `
+                    <button class="btn btn-primary" onclick="editRow(this)">編集</button>
+                    <form class="delete-form" data-material-id="${id}"
+                          action="${DELETE_URL.replace('/0',`/${id}`)}" method="POST" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="${csrf}">
+                        <button type="submit" class="btn btn-danger">削除</button>
+                    </form>`;
+                tr.classList.remove('editable');
+                alert(res.message);
+            })
+            .catch(err=>alert(`更新失敗: ${err}`));
+        };
+
+        /* ---------- 削除 ---------- */
+        document.querySelectorAll('.delete-form').forEach(f=>{
+            f.addEventListener('submit',e=>{
+                e.preventDefault();
+                if(!confirm('対象の端材を削除してよろしいですか？')) return;
+                const csrf = document.querySelector('meta[name="csrf-token"]').content;
+                fetch(f.action,{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+                    body:JSON.stringify({}),
+                    credentials:'same-origin'
+                })
+                .then(r=>r.ok?r.json():r.json().then(e=>Promise.reject(e.message)))
+                .then(res=>{ f.closest('tr').remove(); alert(res.message); })
+                .catch(err=>alert(`削除失敗: ${err}`));
+            });
+        });
+    });
+    </script>
+</body>
+</html>
+

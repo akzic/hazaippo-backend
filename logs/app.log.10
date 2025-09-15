@@ -1,0 +1,82 @@
+2025-06-03 17:49:37,895 INFO: MAX_CONTENT_LENGTH set to 32 MB [in /app/app/blueprints/camera_ai.py:39]
+2025-06-03 17:49:50,921 INFO: [TASK] start image_path=/app/shared_uploads/aa_1f0209775b90416a98e61ebabdac93a4.jpeg [in /app/app/tasks/camera_tasks.py:32]
+2025-06-03 17:49:50,922 INFO: [TASK] Gemini (no preprocess) [in /app/app/tasks/camera_tasks.py:39]
+2025-06-03 17:49:51,790 ERROR: Gemini 分類エラー: 403 Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry. [reason: "SERVICE_DISABLED"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+metadata {
+  key: "serviceTitle"
+  value: "Generative Language API"
+}
+metadata {
+  key: "containerInfo"
+  value: "1011398502540"
+}
+metadata {
+  key: "consumer"
+  value: "projects/1011398502540"
+}
+metadata {
+  key: "activationUrl"
+  value: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"
+}
+, locale: "en-US"
+message: "Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry."
+, links {
+  description: "Google developers console API activation"
+  url: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"
+}
+] [in /app/app/utils/gemini_classifier.py:64]
+2025-06-03 17:49:51,868 INFO: [TASK] Gemini (preprocessed) [in /app/app/tasks/camera_tasks.py:46]
+2025-06-03 17:49:52,203 ERROR: Gemini 分類エラー: 403 Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry. [reason: "SERVICE_DISABLED"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+metadata {
+  key: "serviceTitle"
+  value: "Generative Language API"
+}
+metadata {
+  key: "containerInfo"
+  value: "1011398502540"
+}
+metadata {
+  key: "consumer"
+  value: "projects/1011398502540"
+}
+metadata {
+  key: "activationUrl"
+  value: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"
+}
+, locale: "en-US"
+message: "Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry."
+, links {
+  description: "Google developers console API activation"
+  url: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"
+}
+] [in /app/app/utils/gemini_classifier.py:64]
+2025-06-03 17:49:52,435 INFO: [TASK] reverse geocoded: 日本、〒810-0042 福岡県福岡市中央区赤坂１丁目１６−１３ 上の橋ビル [in /app/app/tasks/camera_tasks.py:63]
+2025-06-03 17:49:52,435 INFO: [TASK] done: {'non_preprocessed': {'status': 'error', 'message': '403 Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry. [reason: "SERVICE_DISABLED"\ndomain: "googleapis.com"\nmetadata {\n  key: "service"\n  value: "generativelanguage.googleapis.com"\n}\nmetadata {\n  key: "serviceTitle"\n  value: "Generative Language API"\n}\nmetadata {\n  key: "containerInfo"\n  value: "1011398502540"\n}\nmetadata {\n  key: "consumer"\n  value: "projects/1011398502540"\n}\nmetadata {\n  key: "activationUrl"\n  value: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"\n}\n, locale: "en-US"\nmessage: "Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry."\n, links {\n  description: "Google developers console API activation"\n  url: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"\n}\n]', 'material_type': 'その他', 'subtype': '', 'size_1': '', 'size_2': '', 'size_3': '', 'quantity': ''}, 'preprocessed': {'status': 'error', 'message': '403 Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry. [reason: "SERVICE_DISABLED"\ndomain: "googleapis.com"\nmetadata {\n  key: "service"\n  value: "generativelanguage.googleapis.com"\n}\nmetadata {\n  key: "serviceTitle"\n  value: "Generative Language API"\n}\nmetadata {\n  key: "containerInfo"\n  value: "1011398502540"\n}\nmetadata {\n  key: "consumer"\n  value: "projects/1011398502540"\n}\nmetadata {\n  key: "activationUrl"\n  value: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"\n}\n, locale: "en-US"\nmessage: "Generative Language API has not been used in project 1011398502540 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry."\n, links {\n  description: "Google developers console API activation"\n  url: "https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=1011398502540"\n}\n]', 'material_type': 'その他', 'subtype': '', 'size_1': '', 'size_2': '', 'size_3': '', 'quantity': ''}} [in /app/app/tasks/camera_tasks.py:76]
+2025-06-03 17:50:20,174 INFO: THE IRIYO startup [in /app/app/__init__.py:80]
+2025-06-03 17:50:21,947 INFO: tasks パッケージがインポートされ、camera_tasks モジュールが読み込まれました。 [in /app/app/tasks/__init__.py:12]
+2025-06-03 17:50:22,171 INFO: MAX_CONTENT_LENGTH set to 32 MB [in /app/app/blueprints/camera_ai.py:39]
+2025-06-03 17:50:22,391 INFO: THE IRIYO startup [in /app/app/__init__.py:80]
+2025-06-03 17:50:22,391 INFO: THE IRIYO startup [in /app/app/__init__.py:80]
+2025-06-03 17:50:22,490 INFO: MAX_CONTENT_LENGTH set to 32 MB [in /app/app/blueprints/camera_ai.py:39]
+2025-06-03 17:50:22,490 INFO: MAX_CONTENT_LENGTH set to 32 MB [in /app/app/blueprints/camera_ai.py:39]
+2025-06-03 17:50:48,045 INFO: THE IRIYO startup [in /app/app/__init__.py:80]
+2025-06-03 17:50:49,072 INFO: tasks パッケージがインポートされ、camera_tasks モジュールが読み込まれました。 [in /app/app/tasks/__init__.py:12]
+2025-06-03 17:50:49,214 INFO: MAX_CONTENT_LENGTH set to 32 MB [in /app/app/blueprints/camera_ai.py:39]
+2025-06-03 17:50:49,299 INFO: THE IRIYO startup [in /app/app/__init__.py:80]
+2025-06-03 17:50:49,299 INFO: THE IRIYO startup [in /app/app/__init__.py:80]
+2025-06-03 17:50:49,331 INFO: MAX_CONTENT_LENGTH set to 32 MB [in /app/app/blueprints/camera_ai.py:39]
+2025-06-03 17:50:49,331 INFO: MAX_CONTENT_LENGTH set to 32 MB [in /app/app/blueprints/camera_ai.py:39]
+2025-06-03 17:51:03,213 INFO: [TASK] start image_path=/app/shared_uploads/aa_66b605e39cff49a79903d13b52fc82c9.jpeg [in /app/app/tasks/camera_tasks.py:32]
+2025-06-03 17:51:03,213 INFO: [TASK] start image_path=/app/shared_uploads/aa_66b605e39cff49a79903d13b52fc82c9.jpeg [in /app/app/tasks/camera_tasks.py:32]
+2025-06-03 17:51:03,214 INFO: [TASK] Gemini (no preprocess) [in /app/app/tasks/camera_tasks.py:39]
+2025-06-03 17:51:03,214 INFO: [TASK] Gemini (no preprocess) [in /app/app/tasks/camera_tasks.py:39]

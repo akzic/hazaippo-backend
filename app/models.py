@@ -6,9 +6,14 @@ from flask_login import UserMixin
 from itsdangerous import URLSafeTimedSerializer as Serializer
 from flask import current_app
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 import pytz
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import event
+from sqlalchemy.orm import joinedload
+from app.utils.s3_uploader import build_s3_url
+import enum
 
 # タイムゾーンの設定
 JST = pytz.timezone('Asia/Tokyo')
@@ -94,7 +99,10 @@ class User(db.Model, UserMixin):
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     last_seen = db.Column(db.DateTime, nullable=True)
     business_structure = db.Column(db.Integer, nullable=False, default=0)
-
+    device_tokens    = db.Column(
+        MutableList.as_mutable(ARRAY(db.String)),
+        nullable=True
+    )
     # リレーションシップ
     materials = db.relationship('Material', back_populates='owner', lazy=True)
     wanted_materials = db.relationship('WantedMaterial', back_populates='owner', lazy=True)
@@ -173,7 +181,7 @@ class User(db.Model, UserMixin):
 class Material(db.Model):
     __tablename__ = 'materials'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     type = db.Column(db.String(100), nullable=False)
     size_1 = db.Column(db.Float, nullable=False)
     size_2 = db.Column(db.Float, nullable=False)
@@ -182,12 +190,14 @@ class Material(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     deadline = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
     exclude_weekends = db.Column(db.Boolean, nullable=False, default=False)
-    image = db.Column(db.String(200), nullable=True, default='default.jpg')
+    image = db.Column(db.String(200), nullable=True, default='no_image.png')
     note = db.Column(db.Text, nullable=True)
     matched = db.Column(db.Boolean, default=False)
     matched_at = db.Column(db.DateTime, nullable=True)
     completed = db.Column(db.Boolean, default=False)
     completed_at = db.Column(db.DateTime, nullable=True)
+    pre_completed    = db.Column(db.Boolean, default=False)
+    pre_completed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
     deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -210,11 +220,16 @@ class Material(db.Model):
     owner = db.relationship('User', back_populates='materials')
     requests = db.relationship('Request', back_populates='material', lazy=True)
 
+    group_id = db.Column(db.Integer,
+                         db.ForeignKey('user_groups.id'),
+                         nullable=True)
+    group = db.relationship('UserGroup', backref='materials')
+
     def __repr__(self):
         return f"<Material {self.type} at {self.location} site_id={self.site_id}>"
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_user: bool = False):
+        d = {
             'id': self.id,
             'user_id': self.user_id,
             'type': self.type,
@@ -241,13 +256,27 @@ class Material(db.Model):
             'm_prefecture': self.m_prefecture,
             'm_city': self.m_city,
             'm_address': self.m_address,
+            'group_id': self.group_id,
         }
+        if include_user:
+            d['user'] = self.owner.to_dict() if self.owner else None
+        return d
+
+@property
+def image_url(self) -> str:
+    """
+    DB に保存されているオブジェクトキーからフル URL を返す
+     テンプレート側は material.image_url を使えば移行コスト 0
+    """
+    if not self.image or self.image == 'no_image.png':
+        return build_s3_url('materials/no_image.png')
+    return build_s3_url(self.image)
 
 # WantedMaterialモデル
 class WantedMaterial(db.Model):
     __tablename__ = 'wanted_materials'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     type = db.Column(db.String(100), nullable=False)
     size_1 = db.Column(db.Float, nullable=False)
     size_2 = db.Column(db.Float, nullable=False)
@@ -261,6 +290,8 @@ class WantedMaterial(db.Model):
     matched_at = db.Column(db.DateTime, nullable=True)
     completed = db.Column(db.Boolean, default=False)
     completed_at = db.Column(db.DateTime, nullable=True)
+    pre_completed    = db.Column(db.Boolean, default=False)
+    pre_completed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
     deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -279,10 +310,11 @@ class WantedMaterial(db.Model):
     requests = db.relationship('Request', back_populates='wanted_material', lazy=True)
 
     def __repr__(self):
-        return f"<WantedMaterial {self.type} desired by {self.owner.email}>"
+        owner_email = self.owner.email if self.owner is not None else "unknown"
+        return f"<WantedMaterial {self.type} desired by {owner_email}>"
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_user: bool = False):
+        d = {
             'id': self.id,
             'user_id': self.user_id,
             'type': self.type,
@@ -308,6 +340,9 @@ class WantedMaterial(db.Model):
             'wm_city': self.wm_city,
             'wm_address': self.wm_address,
         }
+        if include_user:
+            d['user'] = self.owner.to_dict() if self.owner else None
+        return d
 
 # Requestモデル
 class Request(db.Model):
@@ -315,10 +350,15 @@ class Request(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     material_id = db.Column(db.Integer, db.ForeignKey('materials.id'), nullable=True)
     wanted_material_id = db.Column(db.Integer, db.ForeignKey('wanted_materials.id'), nullable=True)
-    requester_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    requested_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    requester_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    requested_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     status = db.Column(db.String(50), nullable=False, default="Pending")
     requested_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
+
+    # 新規カラム
+    accepted_at = db.Column(db.DateTime, nullable=True)
+    rejected_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
 
     # リレーションシップ
     material = db.relationship('Material', back_populates='requests')
@@ -328,6 +368,7 @@ class Request(db.Model):
 
     def accept(self):
         self.status = 'Accepted'
+        self.accepted_at = datetime.now(JST)
         if self.material:
             self.material.matched = True
             self.material.matched_at = datetime.now(JST)
@@ -354,15 +395,36 @@ class Request(db.Model):
             ).all()
         for req in other_requests:
             req.status = 'Rejected'
+            req.rejected_at = datetime.now(JST)
             db.session.add(req)
         db.session.commit()
 
-    @property
-    def requester(self):
-        return self.requester_user
 
-    def __repr__(self):
-        return f"<Request {self.id} from {self.requester.email} to {self.requested_user.email}>"
+    def get_roles_for_material(mat, user_id: int) -> dict[str, bool]:
+        """
+        Material 用 – accepted な Request を 1 件探して役割を返す
+        正:  オーナー(requested_user) = Sender
+            リクエスト送信者(requester_user) = Receiver
+        """
+        req = (Request.query
+            .options(joinedload(Request.requester_user))
+            .filter_by(material_id=mat.id, status='Accepted')
+            .first())
+
+        return {
+            'is_sender':   bool(req and req.requester_user_id == user_id),
+            'is_receiver': bool(req and req.requested_user_id == user_id),
+        }
+    def get_roles_for_wanted(wanted, user_id: int) -> dict[str, bool]:
+        """WantedMaterial 用 –  accepted な Request を 1 件探して役割を返す"""
+        req = (Request.query
+            .options(joinedload(Request.requester_user))
+            .filter_by(wanted_material_id=wanted.id, status='Accepted')
+            .first())
+        return {
+            'is_sender':   bool(req and req.requester_user_id  == user_id),
+            'is_receiver': bool(req and req.requested_user_id == user_id),
+        }
 
     def to_dict(self):
         return {
@@ -372,8 +434,25 @@ class Request(db.Model):
             'requester_user_id': self.requester_user_id,
             'requested_user_id': self.requested_user_id,
             'status': self.status,
-            'requested_at': self.requested_at.isoformat(),
+            'requested_at': self.requested_at.isoformat() if self.requested_at else None,
+            'accepted_at': self.accepted_at.isoformat() if self.accepted_at else None,
+            'rejected_at': self.rejected_at.isoformat() if self.rejected_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
         }
+
+    def __repr__(self):
+        return f"<Request {self.id} from {self.requester_user.email} to {self.requested_user.email}>"
+
+# WantedMaterial の更新後に、完了日時を Request に反映するイベントリスナー
+@event.listens_for(WantedMaterial, 'after_update')
+def update_request_completed_at(mapper, connection, target):
+    # target: 更新された WantedMaterial インスタンス
+    if target.completed and target.completed_at:
+        connection.execute(
+            Request.__table__.update()
+            .where(Request.wanted_material_id == target.id)
+            .values(completed_at=target.completed_at)
+        )
 
 # Roomモデル
 class Room(db.Model):
@@ -535,21 +614,59 @@ class Log(db.Model):
 class Conversation(db.Model):
     __tablename__ = 'conversations'
     id = db.Column(db.Integer, primary_key=True)
-    user1_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    user2_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
-    # 非表示用のカラムを追加（ソフトデリート）
-    is_hidden = db.Column(db.Boolean, nullable=False, default=False)
     
-    user1 = db.relationship('User', foreign_keys=[user1_id], backref='conversations_as_user1')
-    user2 = db.relationship('User', foreign_keys=[user2_id], backref='conversations_as_user2')
-    
-    messages = db.relationship('Message', back_populates='conversation', lazy='dynamic', cascade="all, delete-orphan")
-    
-    __table_args__ = (
-        db.UniqueConstraint('user1_id', 'user2_id', name='unique_user_pair'),
+    # user1_id は必ず存在する前提ならNULL不可
+    user1_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False
     )
     
+    # user2_id は存在しないケースもあるならNULL可
+    user2_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=True
+    )
+    
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
+    is_hidden = db.Column(db.Boolean, nullable=False, default=False)
+    last_message = db.Column(db.Text, nullable=True)
+    chat_token = db.Column(db.Text, nullable=True)
+
+    user1 = db.relationship('User', foreign_keys=[user1_id], backref='conversations_as_user1')
+    user2 = db.relationship('User', foreign_keys=[user2_id], backref='conversations_as_user2', lazy='joined')
+
+    messages = db.relationship(
+        'Message',
+        back_populates='conversation',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+
+    # ──────────────────────────────────────────────
+    # チャット用トークン生成（itsdangerous 利用）
+    # ──────────────────────────────────────────────
+    def gen_chat_token(self, user_id: int, expires_sec: int = 86400) -> str:
+        """
+        引数: user_id = トークンを発行するユーザ
+        戻り値: 署名付きトークン（base64 str）
+        """
+        s = Serializer(current_app.config["SECRET_KEY"])
+        token = s.dumps({"cid": self.id, "uid": user_id}, salt="chat")
+
+        # 直近トークンを DB に保持したい場合はここで上書き
+        self.chat_token = token
+        db.session.add(self)            # 変更をマーク
+        # commit は呼び出し側でまとめて行う想定
+        return token
+
+    # もし user2_id が NULL でも unique_user_pair 制約をどうするか注意
+    __table_args__ = (
+        # 下記uniqueは user2_id がNULLの時どう扱われるか検討必要
+        db.UniqueConstraint('user1_id', 'user2_id', name='unique_user_pair'),
+    )
+
     def __init__(self, user1_id, user2_id, **kwargs):
         if user1_id < user2_id:
             self.user1_id = user1_id
@@ -655,3 +772,63 @@ class APIKey(db.Model):
             'created_at': self.created_at.isoformat(),
             'revoked': self.revoked,
         }
+
+class GroupRole(str, enum.Enum):
+    MEMBER = "member"
+    ADMIN  = "admin"
+
+class UserGroup(db.Model):
+    __tablename__ = "user_groups"
+
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(100), nullable=False)
+    owner_user_id = db.Column(db.Integer,
+                              db.ForeignKey("users.id", ondelete="CASCADE"),
+                              nullable=False)
+    description = db.Column(db.Text)
+    created_at  = db.Column(db.DateTime(timezone=True),
+                            default=datetime.now(JST),
+                            nullable=False)
+    deleted_at  = db.Column(db.DateTime(timezone=True))
+
+    # ───── リレーション ─────
+    owner   = db.relationship("User",
+                              backref="owned_groups",
+                              foreign_keys=[owner_user_id])
+    members = db.relationship("GroupMembership",
+                              back_populates="group",
+                              cascade="all, delete-orphan")
+
+    @property
+    def is_active(self) -> bool:
+        return self.deleted_at is None
+
+class GroupMembership(db.Model):
+    __tablename__ = "group_memberships"
+
+    group_id = db.Column(db.Integer,
+                         db.ForeignKey("user_groups.id", ondelete="CASCADE"),
+                         primary_key=True)
+    user_id  = db.Column(db.Integer,
+                         db.ForeignKey("users.id", ondelete="CASCADE"),
+                         primary_key=True)
+
+
+    role = db.Column(
+        db.Enum(
+            GroupRole,
+            name="group_role",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls]  # ★追加
+        ),
+        nullable=False,
+        server_default=GroupRole.MEMBER.value
+    )
+
+    joined_at = db.Column(db.DateTime(timezone=True),
+                          default=datetime.now(JST),
+                          nullable=False)
+
+    # ───── リレーション ─────
+    group = db.relationship("UserGroup", back_populates="members")
+    user  = db.relationship("User",
+                            backref="group_memberships")

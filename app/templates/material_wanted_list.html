@@ -3,7 +3,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>希望端材一覧 - はざいっぽ</title>
+    <title>希望資材一覧 - はざいっぽ</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/material_wanted_list.css') }}">
     <style>
     </style>
@@ -12,7 +12,7 @@
 <body>
     {% include 'header.html' %}
     <div class="content">
-        <h1>希望端材一覧</h1>
+        <h1>希望資材一覧</h1>
 
         <div class="button-group">
             <a href="{{ url_for('dashboard.dashboard_home') }}" class="back-button">戻る</a>
@@ -20,12 +20,12 @@
 
         <!-- タブヘッダー -->
         <div class="tab">
-            <button class="tablinks active" onclick="openTab(event, 'Unmatched')">マッチしていない希望端材</button>
-            <button class="tablinks" onclick="openTab(event, 'MatchedUncompleted')">マッチしているが未完了の希望端材</button>
-            <button class="tablinks" onclick="openTab(event, 'Completed')">完了済みの希望端材</button>
+            <button class="tablinks active" onclick="openTab(event, 'Unmatched')">マッチしていない希望資材</button>
+            <button class="tablinks" onclick="openTab(event, 'MatchedUncompleted')">マッチしているが未完了の希望資材</button>
+            <button class="tablinks" onclick="openTab(event, 'Completed')">完了済みの希望資材</button>
         </div>
 
-        <!-- マッチしていない希望端材 タブコンテンツ -->
+        <!-- マッチしていない希望資材 タブコンテンツ -->
         <div id="Unmatched" class="tabcontent" style="display: block;">
             <table>
                 <thead>
@@ -82,7 +82,7 @@
             </table>
         </div>
 
-        <!-- マッチしているが未完了の希望端材 タブコンテンツ -->
+        <!-- マッチしているが未完了の希望資材 タブコンテンツ -->
         <div id="MatchedUncompleted" class="tabcontent">
             <table>
                 <thead>
@@ -138,7 +138,7 @@
             </table>
         </div>
 
-        <!-- 完了済みの希望端材 タブコンテンツ -->
+        <!-- 完了済みの希望資材 タブコンテンツ -->
         <div id="Completed" class="tabcontent">
             <table>
                 <thead>
@@ -201,7 +201,7 @@
     <div id="deadlineModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <p>締切日を過ぎている端材が存在します。締切日を変更するか、端材を削除してください。</p>
+            <p>締切日を過ぎている資材が存在します。締切日を変更するか、資材を削除してください。</p>
         </div>
     </div>
 

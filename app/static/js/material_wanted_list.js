@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", function() {
         evt.currentTarget.className += " active";
     }
 
-    // 希望端材の編集用の関数
+    // 希望資材の編集用の関数
     window.editWantedRow = function(button) {
         const row = button.closest('tr');
         const wantedMaterialId = row.getAttribute('data-wanted-material-id');
@@ -299,7 +299,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // AJAXによる希望材料の削除
     window.deleteWantedMaterial = function(button, wantedMaterialId) {
-        if (!confirm('対象の希望端材を削除してもよろしいですか。')) {
+        if (!confirm('対象の希望資材を削除してもよろしいですか。')) {
             return;
         }
 
@@ -346,7 +346,7 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
-    // 締切日が過ぎている端材が存在するかチェックしてモーダルを表示（⑤）
+    // 締切日が過ぎている資材が存在するかチェックしてモーダルを表示（⑤）
     function checkDeadlines() {
         const rows = document.querySelectorAll('#Unmatched tbody tr, #MatchedUncompleted tbody tr, #Completed tbody tr');
         let hasPastDeadline = false;
@@ -450,7 +450,7 @@ document.addEventListener("DOMContentLoaded", function() {
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
 
-    // ページ読み込み時に締切日が過ぎている端材をチェック（②, ⑤）
+    // ページ読み込み時に締切日が過ぎている資材をチェック（②, ⑤）
     checkDeadlines();
 
     // ロードインジケーターのスタイルを追加

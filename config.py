@@ -43,3 +43,9 @@ class Config:
 
     # Flask-Limiter の設定
     RATELIMIT_STORAGE_URL = os.environ.get('RATELIMIT_STORAGE_URL') or 'redis://localhost:6379/1'  # Redisを使用
+
+    S3_BUCKET = os.getenv("S3_BUCKET", "hazaippo-assets-prod")
+    AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-1")
+    # ↓ローカル開発だけキーを読む。EC2/IAM ロール上では不要
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")

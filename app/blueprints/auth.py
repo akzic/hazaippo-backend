@@ -2,7 +2,7 @@
 
 from flask import Blueprint, render_template, url_for, flash, redirect, request, g, current_app
 from app import db, bcrypt
-from app.forms import RegistrationForm, LoginForm, ResetPasswordForm, RequestResetForm
+from app.forms import RegistrationForm, LoginForm, ResetPasswordForm, RequestResetForm, DeleteAccountForm
 from app.models import User
 from flask_login import login_user, current_user, logout_user, login_required
 import os
@@ -18,7 +18,7 @@ JST = pytz.timezone('Asia/Tokyo')
 def home():
     return redirect(url_for('auth.login'))
 
-@auth.before_app_request
+@auth.before_request
 def before_request():
     allowed_endpoints = [
         'auth.login', 
@@ -266,3 +266,18 @@ def send_reset_sms(user):
     except Exception as e:
         current_app.logger.error(f"SMS送信に失敗しました: {e}")
         return False
+
+@auth.route("/delete_account", methods=["POST"])
+@login_required
+def delete_account():
+    form = DeleteAccountForm()
+    # フォームのCSRFトークン検証がOKか確認
+    if form.validate_on_submit():
+        db.session.delete(current_user)
+        db.session.commit()
+        logout_user()
+        flash("アカウントを削除しました。", "success")
+        return redirect(url_for('auth.login'))
+    else:
+        flash("フォーム送信に問題がありました。", "danger")
+        return redirect(url_for('profile.show_profile'))

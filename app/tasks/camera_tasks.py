@@ -1,82 +1,107 @@
 # app/tasks/camera_tasks.py
+"""
+画像 AI 推論 Celery タスク
+1) 前処理なし  → 推論
+2) 前処理あり  → 推論
+3) 位置情報を（あれば）逆ジオコーディングして付与
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import shutil
+from uuid import uuid4
+
+import requests
 
 from app.celery_app import celery
-from app.image_processing import process_image_ai
-import logging
-import requests
-import os
+from app.image_processing import preprocess_image, classify_image  # あなたの実装
+# from app.utils.s3_uploader import upload_file_to_s3  # S3 へ保存したい場合は有効に
 
-# ロガーの設定
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-@celery.task(bind=True)
-def process_image_task(self, image_path: str, latitude: str = None, longitude: str = None):
+
+@celery.task(bind=True, name="camera.process_image_ai")  # ★ 公開名を固定
+def process_image_ai(
+    self,
+    image_path: str,
+    latitude: str | None = None,
+    longitude: str | None = None,
+) -> dict:
     """
-    非同期で画像処理を行うタスク。
-    前処理ありと前処理なしの両方の結果を取得。
+    Parameters
+    ----------
+    image_path : str
+        ローカル一時ファイルのパス
+    latitude / longitude : str | None
+        緯度経度文字列（'' 空文字なら無視）
+
+    Returns
+    -------
+    dict
+        {
+          "non_preprocessed": {"status": "success", ...},
+          "preprocessed":    {"status": "success", ...}
+        }
     """
+    tmp_dir = os.path.join("/tmp", "gemini_task", uuid4().hex)
+    os.makedirs(tmp_dir, exist_ok=True)
+
     try:
-        logger.info(f"非同期タスク開始: image_path={image_path}, latitude={latitude}, longitude={longitude}")
+        logger.info("[TASK] start: %s", image_path)
 
-        # 前処理ありでの画像処理
-        logger.info("前処理ありで画像を処理します。")
-        result_preprocessed = process_image_ai(image_path, preprocess=True)
+        # ---- 元画像をコピーして保存（安全のため読み込み専用） ----
+        orig_path = os.path.join(tmp_dir, "orig.jpg")
+        shutil.copy(image_path, orig_path)
 
-        # 前処理なしでの画像処理
-        logger.info("前処理なしで画像を処理します。")
-        result_non_preprocessed = process_image_ai(image_path, preprocess=False)
+        # ---- 前処理なし推論 ----
+        result_np = classify_image(orig_path)
 
-        # 位置情報を含める（両方の結果に適用）
+        # ---- 前処理あり推論 ----
+        work_path = os.path.join(tmp_dir, "work.jpg")
+        shutil.copy(orig_path, work_path)
+        preprocess_image(work_path)
+        result_p = classify_image(work_path)
+
+        # ---- 逆ジオコーディング ----
         location = ""
-        if latitude and longitude:
-            # 逆ジオコーディングを行う（Google Maps Geocoding APIを使用）
-            google_api_key = celery.conf.get('GOOGLE_API_KEY')
-            if google_api_key:
-                geocoding_url = (
-                    f"https://maps.googleapis.com/maps/api/geocode/json?"
-                    f"latlng={latitude},{longitude}&language=ja&key={google_api_key}"
+        if latitude and longitude and latitude.strip() and longitude.strip():
+            gkey = os.getenv("GOOGLE_API_KEY") or celery.conf.get("GOOGLE_API_KEY")
+            if gkey:
+                url = (
+                    "https://maps.googleapis.com/maps/api/geocode/json"
+                    f"?latlng={latitude},{longitude}&language=ja&key={gkey}"
                 )
                 try:
-                    response = requests.get(geocoding_url, timeout=10)
-                    geocoding_data = response.json()
-                    if geocoding_data['status'] == 'OK' and len(geocoding_data['results']) > 0:
-                        location = geocoding_data['results'][0]['formatted_address']
-                        logger.info(f"非同期タスクで位置情報を取得しました: {location}")
-                    else:
-                        logger.warning(f"非同期タスクで逆ジオコーディングに失敗しました: {geocoding_data['status']}")
+                    data = requests.get(url, timeout=10).json()
+                    if data.get("status") == "OK" and data["results"]:
+                        location = data["results"][0]["formatted_address"]
                 except Exception as e:
-                    logger.error(f"非同期タスクで逆ジオコーディング中にエラーが発生しました: {e}")
-            else:
-                logger.warning("GOOGLE_API_KEY が設定されていません。位置情報の取得をスキップします。")
-        else:
-            logger.info("緯度経度が提供されていないため、位置情報の取得をスキップします。")
+                    logger.warning("[TASK] geocoding error: %s", e)
 
-        # 両方の結果に位置情報を追加
-        if result_preprocessed.get('status') == 'success':
-            result_preprocessed['location'] = location
-        if result_non_preprocessed.get('status') == 'success':
-            result_non_preprocessed['location'] = location
+        for r in (result_np, result_p):
+            if r.get("status") == "success":
+                r["location"] = location
 
-        # 結果をまとめる
-        combined_result = {
-            'preprocessed': result_preprocessed,
-            'non_preprocessed': result_non_preprocessed
-        }
-
-        logger.info(f"非同期タスク完了: {combined_result}")
-
-        return combined_result  # 結果を返す
+        return {"non_preprocessed": result_np, "preprocessed": result_p}
 
     except Exception as e:
-        logger.error(f"非同期タスク中にエラーが発生しました: {e}")
-        self.update_state(state='FAILURE', meta={'message': str(e)})
-        return {'status': 'error', 'message': str(e)}
+        logger.exception("[TASK] ERROR")
+        self.update_state(state="FAILURE", meta={"message": str(e)})
+        return {"status": "error", "message": str(e)}
+
     finally:
-        # 一時ファイルの削除
+        # ---- 後始末 ----
         try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
             if os.path.exists(image_path):
                 os.remove(image_path)
-                logger.info(f"一時ファイルを削除しました: {image_path}")
         except Exception as e:
-            logger.error(f"一時ファイルの削除中にエラーが発生しました: {e}")
+            logger.warning("[TASK] cleanup error: %s", e)
+
+
+# ---- 旧 import 対応用エイリアス ----------------------------
+process_image_task = process_image_ai
+__all__ = ["process_image_ai", "process_image_task"]

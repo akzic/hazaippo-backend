@@ -1,488 +1,596 @@
-# app/api/api_email_notifications.py
+# app/blueprints/email_notifications.py
 
-from flask import Blueprint, request, jsonify, current_app
-from flask_login import login_required
-from app import db, mail
-from app.models import Log  # 必要に応じて他のモデルをインポート
+from flask import Blueprint, render_template, current_app
 from flask_mail import Message
 import os
-import logging
+from app import mail
 
-# Blueprintの定義
-api_email_notifications_bp = Blueprint('api_email_notifications', __name__, url_prefix='/api/email_notifications')
+email_notifications = Blueprint('email_notifications', __name__)
 
-# ロガーの設定
-logger = logging.getLogger(__name__)
-
-# 既存のemail_notifications.pyの機能をインポート
-from app.blueprints.email_notifications import (
-    send_email_safe,
-    send_welcome_email,
-    send_material_registration_email,
-    send_wanted_material_registration_email,
-    send_request_email,
-    send_new_request_received_email,
-    send_accept_request_email,
-    send_accept_request_to_sender_email,
-    send_reject_request_email,
-    send_reject_request_to_sender_email,
-    send_reservation_confirmation_email,
-    send_lecture_confirmation_email,
-    send_cancel_reservation_email,
-    send_new_message_email
-)
-
-# 各エンドポイントの実装
-
-@api_email_notifications_bp.route('/send_welcome_email', methods=['POST'])
-@login_required
-def api_send_welcome_email():
-    """
-    ユーザーにウェルカムメールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "user@example.com"
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
-
-    if not user_email:
-        return jsonify({'status': 'error', 'message': 'ユーザーのメールアドレスが指定されていません。'}), 400
-
+def send_email_safe(msg):
     try:
-        success = send_welcome_email(user_email)
-        if success:
-            return jsonify({'status': 'success', 'message': 'ウェルカムメールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': 'ウェルカムメールの送信に失敗しました。'}), 500
+        mail.send(msg)
+        return True
     except Exception as e:
-        logger.error(f"ウェルカムメール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': 'ウェルカムメールの送信中にエラーが発生しました。'}), 500
+        # エラーログを記録するか、必要に応じて処理を追加
+        current_app.logger.error(f"Error sending email: {e}")
+        return False
 
+def send_welcome_email(user_email):
+    msg = Message(
+        'ユーザーが登録されました。- はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = '''\
+この度ははざいっぽにご登録いただき、誠にありがとうございます。
+アカウントが正常に作成されました。
 
-@api_email_notifications_bp.route('/send_material_registration_email', methods=['POST'])
-@login_required
-def api_send_material_registration_email():
-    """
-    ユーザーに端材登録メールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "user@example.com",
-        "material": {
-            "type": "金属",
-            "size_1": "5.0",
-            "size_2": "4.5",
-            "size_3": "3.0",
-            "location": "倉庫A",
-            "quantity": "10",
-            "note": "新しい備考"
-        }
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
-    material = data.get('material')
+今後も末永くご愛顧賜りますようお願い申し上げます。
 
-    if not user_email or not material:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
+何かご不明点やご質問がございましたら、お気軽にお問い合わせください。
 
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_material_registration_email(user_email, material):
+    msg = Message(
+        '余った資材の登録が完了しました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = f'''\
+余った資材の登録をいただき、誠にありがとうございました。
+以下の情報にて登録が完了いたしましたことをご報告申し上げます。
+
+【登録情報】
+
+材料名：{material.type}
+サイズ：{material.size_1}×{material.size_2}×{material.size_3}
+場所：{material.location}
+数量：{material.quantity}個
+コメント：{material.note}
+
+ご登録いただいた資材は、すぐに表示され、必要としている方々にマッチングされます。
+
+何かご不明点やご質問がございましたら、どうぞお気軽にお問い合わせください。
+
+今後とも「THE-IRIYO」をどうぞよろしくお願い申し上げます。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_wanted_material_registration_email(user_email, wanted_material):
+    msg = Message(
+        '欲しい資材の登録が完了しました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = f'''\
+欲しい資材の登録をいただき、誠にありがとうございました。
+以下の情報にて登録が完了しましたことをご報告申し上げます。
+
+【登録情報】
+
+材料名：{wanted_material.type}
+サイズ：{wanted_material.size_1}×{wanted_material.size_2}×{wanted_material.size_3}
+場所：{wanted_material.location}
+数量：{wanted_material.quantity}個
+コメント：{wanted_material.note}
+
+ご登録いただいた資材は、すぐに表示され、必要としている方々にマッチングされます。
+
+何かご不明点やご質問がございましたら、どうぞお気軽にお問い合わせください。
+
+今後とも「THE-IRIYO」をどうぞよろしくお願い申し上げます。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_request_email(user_email):
+    msg = Message(
+        'リクエストの送信が完了しました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = '''\
+資材のリクエストを送信しました。
+
+資材のリクエストが承諾されるまでお待ちください。
+
+もしこのリクエストに覚えがない場合は、このメールを無視してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐに私たちにご連絡ください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_new_request_received_email(user_email):
+    msg = Message(
+        '新たなリクエストが届きました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = '''\
+資材のリクエストが届きました。
+
+「はざいっぽ」ログイン後のダッシュボード画面にて、内容を確認の上、リクエストを受けてください。
+
+もしこのリクエストに覚えがない場合は、このメールを無視してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐにご連絡ください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_accept_request_email(requester, material, accepted_user):
+    msg = Message(
+        'リクエストが承認されました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[requester.email]
+    )
+    msg.body = f'''\
+リクエストが承認されました。
+
+下記情報にて連絡を取り合い、受け渡しを完了させてください。
+
+法人名（屋号）: {accepted_user.company_name}
+法人住所: {accepted_user.prefecture} {accepted_user.city} {accepted_user.address}
+業種: {accepted_user.industry}
+職種: {accepted_user.job_title}
+担当者氏名: {accepted_user.contact_name}
+担当者メールアドレス: {accepted_user.email}
+担当者電話番号: {accepted_user.contact_phone}
+材料名: {material.type}
+サイズ: {material.size_1}×{material.size_2}×{material.size_3}
+場所: {material.location}
+数量: {material.quantity}個
+コメント: {material.note}
+
+■受け渡しの完了後、「はざいっぽ」ログイン後のダッシュボード画面にて、対象の取引の完了ボタンを押してください。
+
+もしこのリクエストに覚えがない場合は、このメールを直ちに削除してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐにご連絡ください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+'''
+    return send_email_safe(msg)
+
+def send_accept_request_to_sender_email(requester, material, accepted_user):
+    msg = Message(
+        'リクエストを送信した予約が承認されました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[accepted_user.email]
+    )
+    msg.body = f'''\
+リクエストを送信した予約が承認されました。
+
+下記情報にて連絡を取り合い、取引を完了させてください。
+
+法人名（屋号）: {requester.company_name}
+法人住所: {requester.prefecture} {requester.city} {requester.address}
+業種: {requester.industry}
+職種: {requester.job_title}
+担当者氏名: {requester.contact_name}
+担当者メールアドレス: {requester.email}
+担当者電話番号: {requester.contact_phone}
+材料名: {material.type}
+サイズ: {material.size_1}×{material.size_2}×{material.size_3}
+場所: {material.location}
+数量: {material.quantity}個
+コメント: {material.note}
+
+もしこのリクエストに覚えがない場合は、このメールを直ちに削除してください。アカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐにご連絡ください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_accept_request_wanted_email(requester, wanted_material, accepted_user):
+    msg = Message(
+        '欲しい資材がマッチしました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[requester.email]
+    )
+    msg.body = f'''\
+欲しい資材がマッチしました。
+
+下記情報にて連絡を取り合い、受け渡しを完了させてください。
+
+法人名（屋号）: {accepted_user.company_name}
+法人住所: {accepted_user.prefecture} {accepted_user.city} {accepted_user.address}
+業種: {accepted_user.industry}
+職種: {accepted_user.job_title}
+担当者氏名: {accepted_user.contact_name}
+担当者メールアドレス: {accepted_user.email}
+担当者電話番号: {accepted_user.contact_phone}
+材料名: {wanted_material.type}
+サイズ: {wanted_material.size_1}×{wanted_material.size_2}×{wanted_material.size_3}
+場所: {wanted_material.location}
+数量: {wanted_material.quantity}個
+コメント: {wanted_material.note}
+
+■受け渡しの完了後、「はざいっぽ」ログイン後のダッシュボード画面にて、対象の取引の完了ボタンを押してください。
+
+もしこのリクエストに覚えがない場合は、このメールを直ちに削除してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐにご連絡ください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_accept_request_wanted_to_sender_email(requester, wanted_material, accepted_user):
+    msg = Message(
+        'リクエストを送信した資材がマッチしました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[accepted_user.email]
+    )
+    msg.body = f'''\
+リクエストを送信した資材がマッチしました。
+
+下記情報にて連絡を取り合い、取引を完了させてください。
+
+法人名（屋号）: {requester.company_name}
+法人住所: {requester.prefecture} {requester.city} {requester.address}
+業種: {requester.industry}
+職種: {requester.job_title}
+担当者氏名: {requester.contact_name}
+担当者メールアドレス: {requester.email}
+担当者電話番号: {requester.contact_phone}
+材料名: {wanted_material.type}
+サイズ: {wanted_material.size_1}×{wanted_material.size_2}×{wanted_material.size_3}
+場所: {wanted_material.location}
+数量: {wanted_material.quantity}個
+コメント: {wanted_material.note}
+
+もしこのリクエストに覚えがない場合は、このメールを直ちに削除してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐにご連絡ください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_reservation_confirmation_email(user_email, date, time_slot):
+    msg = Message(
+        '予約確認 - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = f'''\
+下記の日程でターミナルの予約が確定しました。
+
+【予約情報】
+日付：{date}
+時間：{time_slot}
+
+予約内容を確認の上、スケジュールに合わせてご準備ください。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_lecture_confirmation_email(lecturer_email, date, time_slot):
+    msg = Message(
+        'レクチャー予約確認 - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[lecturer_email]
+    )
+    msg.body = f'''\
+下記の日程でレクチャーの予約が確定しました。
+
+【レクチャー情報】
+日付：{date}
+時間：{time_slot}
+
+準備が整いましたら、ご連絡いただけますようお願い申し上げます。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_lecture_approval_email(requester_email, reservation, lecturer):
     try:
-        success = send_material_registration_email(user_email, material)
-        if success:
-            return jsonify({'status': 'success', 'message': '端材登録メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': '端材登録メールの送信に失敗しました。'}), 500
+        msg = Message(
+            'レクチャーリクエストが承認されました - はざいっぽ',
+            sender=os.environ.get('EMAIL_USER'),
+            recipients=[requester_email]
+        )
+        msg.body = f'''\
+    あなたのレクチャーリクエストが承認されました。
+    
+    【レクチャー情報】
+    日付：{reservation.date}
+    時間：{reservation.start_time.strftime('%H:%M')} ~ {reservation.end_time.strftime('%H:%M')}
+    レクチャー担当者：{lecturer.contact_name} ({lecturer.email})
+    
+    レクチャーの詳細については、担当者と直接連絡を取り合ってください。
+    
+    何かご不明点がございましたら、サポートまでお問い合わせください。
+    
+    よろしくお願いいたします。
+    
+    はざいっぽ チーム
+    
+    ---------------------------------
+    
+    ZAI株式会社
+    システムチーム
+    メール: support@zai-ltd.com
+    電話: 052-990-3452
+    住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+    
+    ---------------------------------
+    '''
+        send_email_safe(msg)
+        return True
     except Exception as e:
-        logger.error(f"端材登録メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '端材登録メールの送信中にエラーが発生しました。'}), 500
+        current_app.logger.error(f"レクチャー承認メール送信エラー: {e}")
+        return False
 
-
-@api_email_notifications_bp.route('/send_wanted_material_registration_email', methods=['POST'])
-@login_required
-def api_send_wanted_material_registration_email():
-    """
-    ユーザーに欲しい端材登録メールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "user@example.com",
-        "wanted_material": {
-            "type": "プラスチック",
-            "size_1": "2.0",
-            "size_2": "3.5",
-            "size_3": "1.5",
-            "location": "倉庫B",
-            "quantity": "5",
-            "note": "必要な備考"
-        }
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
-    wanted_material = data.get('wanted_material')
-
-    if not user_email or not wanted_material:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
+def send_lecturer_confirmation_email(lecturer_email, reservation, requester):
     try:
-        success = send_wanted_material_registration_email(user_email, wanted_material)
-        if success:
-            return jsonify({'status': 'success', 'message': '欲しい端材登録メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': '欲しい端材登録メールの送信に失敗しました。'}), 500
+        msg = Message(
+            'レクチャーが確定しました - はざいっぽ',
+            sender=os.environ.get('EMAIL_USER'),
+            recipients=[lecturer_email]
+        )
+        msg.body = f'''\
+    レクチャーが確定しました。
+    
+    【レクチャー情報】
+    日付：{reservation.date}
+    時間：{reservation.start_time.strftime('%H:%M')} ~ {reservation.end_time.strftime('%H:%M')}
+    予約者：{requester.contact_name} ({requester.email})
+    
+    レクチャーの詳細については、予約者と直接連絡を取り合ってください。
+    
+    何かご不明点がございましたら、サポートまでお問い合わせください。
+    
+    よろしくお願いいたします。
+    
+    はざいっぽ チーム
+    
+    ---------------------------------
+    
+    ZAI株式会社
+    システムチーム
+    メール: support@zai-ltd.com
+    電話: 052-990-3452
+    住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+    
+    ---------------------------------
+    '''
+        send_email_safe(msg)
+        return True
     except Exception as e:
-        logger.error(f"欲しい端材登録メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '欲しい端材登録メールの送信中にエラーが発生しました。'}), 500
+        current_app.logger.error(f"レクチャー担当者確認メール送信エラー: {e}")
+        return False
 
+def send_cancel_reservation_email(user_email, reservation):
+    msg = Message(
+        '予約がキャンセルされました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = f'''\
+あなたの以下の予約がキャンセルされました。
 
-@api_email_notifications_bp.route('/send_request_email', methods=['POST'])
-@login_required
-def api_send_request_email():
-    """
-    ユーザーにリクエストメールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "user@example.com"
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
+【予約情報】
+日付：{reservation.date}
+時間：{reservation.start_time.strftime('%H:%M')} ~ {reservation.end_time.strftime('%H:%M')}
 
-    if not user_email:
-        return jsonify({'status': 'error', 'message': 'ユーザーのメールアドレスが指定されていません。'}), 400
+予約のキャンセルを希望された場合は、再度予約を行ってください。
 
+何かご不明点やご質問がございましたら、サポートまでお問い合わせください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_reject_request_email(user_email, reservation, rejected_user):
+    msg = Message(
+        'リクエストが拒否されました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user_email]
+    )
+    msg.body = f'''\
+リクエストが拒否されました。
+
+以下の予約に関するリクエストが拒否されました。
+
+【予約情報】
+日付：{reservation.date}
+時間：{reservation.start_time.strftime('%H:%M')} ~ {reservation.end_time.strftime('%H:%M')}
+
+リクエストを拒否しました。
+
+何かご不明点やご質問がございましたら、サポートまでお問い合わせください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_reject_request_to_sender_email(requester_email, reservation, rejected_user):
+    msg = Message(
+        'リクエストを拒否されました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[rejected_user.email]
+    )
+    msg.body = f'''\
+あなたが送信したリクエストが拒否されました。
+
+以下の予約に関するリクエストが拒否されました。
+
+【予約情報】
+日付：{reservation.date}
+時間：{reservation.start_time.strftime('%H:%M')} ~ {reservation.end_time.strftime('%H:%M')}
+
+リクエストが拒否されました。
+
+もしこのリクエストに覚えがない場合は、このメールを無視してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐにご連絡ください。
+
+よろしくお願いいたします。
+
+はざいっぽ チーム
+
+---------------------------------
+
+ZAI株式会社
+システムチーム
+メール: support@zai-ltd.com
+電話: 052-990-3452
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
+
+---------------------------------
+'''
+    return send_email_safe(msg)
+
+def send_new_message_email(to_email, company_name):
     try:
-        success = send_request_email(user_email)
-        if success:
-            return jsonify({'status': 'success', 'message': 'リクエストメールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': 'リクエストメールの送信に失敗しました。'}), 500
+        msg = Message(
+            '新しいメッセージがあります',
+            sender=os.environ.get('EMAIL_USER'),
+            recipients=[to_email]
+        )
+        msg.body = f"{company_name} から新しいメッセージが届いています。"
+        mail.send(msg)
+        return True
     except Exception as e:
-        logger.error(f"リクエストメール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': 'リクエストメールの送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_new_request_received_email', methods=['POST'])
-@login_required
-def api_send_new_request_received_email():
-    """
-    レクチャー担当者に新規リクエスト受信メールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "lecturer@example.com"
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
-
-    if not user_email:
-        return jsonify({'status': 'error', 'message': 'レクチャー担当者のメールアドレスが指定されていません。'}), 400
-
-    try:
-        success = send_new_request_received_email(user_email)
-        if success:
-            return jsonify({'status': 'success', 'message': '新規リクエスト受信メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': '新規リクエスト受信メールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"新規リクエスト受信メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '新規リクエスト受信メールの送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_accept_request_email', methods=['POST'])
-@login_required
-def api_send_accept_request_email():
-    """
-    リクエスト承認者に承認メールを送信します。
-    リクエストボディ例:
-    {
-        "requester": {
-            "company_name": "株式会社ABC",
-            "email": "requester@example.com",
-            "contact_name": "田中 太郎",
-            "prefecture": "東京都",
-            "city": "新宿区",
-            "address": "西新宿2-8-1",
-            "industry": "IT",
-            "job_title": "マネージャー",
-            "contact_phone": "03-1234-5678"
-        },
-        "material": {
-            "type": "金属",
-            "size_1": "5.0",
-            "size_2": "4.5",
-            "size_3": "3.0",
-            "location": "倉庫A",
-            "quantity": "10",
-            "note": "新しい備考"
-        },
-        "accepted_user": {
-            "company_name": "株式会社XYZ",
-            "email": "accepted_user@example.com",
-            "contact_name": "佐藤 花子",
-            "prefecture": "大阪府",
-            "city": "大阪市",
-            "address": "梅田1-1-1",
-            "industry": "製造",
-            "job_title": "主任",
-            "contact_phone": "06-8765-4321"
-        }
-    }
-    """
-    data = request.get_json()
-    requester = data.get('requester')
-    material = data.get('material')
-    accepted_user = data.get('accepted_user')
-
-    if not requester or not material or not accepted_user:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_accept_request_email(requester, material, accepted_user)
-        if success:
-            return jsonify({'status': 'success', 'message': 'リクエスト承認メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': 'リクエスト承認メールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"リクエスト承認メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': 'リクエスト承認メールの送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_accept_request_to_sender_email', methods=['POST'])
-@login_required
-def api_send_accept_request_to_sender_email():
-    """
-    リクエスト送信者に承認メールを送信します。
-    リクエストボディ例:
-    {
-        "requester_email": "requester@example.com",
-        "reservation": {
-            "date": "2024-05-01",
-            "start_time": "10:00",
-            "end_time": "12:00"
-        },
-        "accepted_user_email": "accepted_user@example.com"
-    }
-    """
-    data = request.get_json()
-    requester_email = data.get('requester_email')
-    reservation = data.get('reservation')
-    accepted_user_email = data.get('accepted_user_email')
-
-    if not requester_email or not reservation or not accepted_user_email:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_accept_request_to_sender_email(requester_email, reservation, accepted_user_email)
-        if success:
-            return jsonify({'status': 'success', 'message': 'リクエスト承認者へのメールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': 'リクエスト承認者へのメールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"リクエスト承認者へのメール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': 'リクエスト承認者へのメール送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_reject_request_email', methods=['POST'])
-@login_required
-def api_send_reject_request_email():
-    """
-    リクエスト拒否者に拒否メールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "user@example.com",
-        "reservation": {
-            "date": "2024-05-01",
-            "start_time": "10:00",
-            "end_time": "12:00"
-        },
-        "rejected_user": {
-            "company_name": "株式会社XYZ",
-            "email": "rejected_user@example.com",
-            "contact_name": "佐藤 花子",
-            "prefecture": "大阪府",
-            "city": "大阪市",
-            "address": "梅田1-1-1",
-            "industry": "製造",
-            "job_title": "主任",
-            "contact_phone": "06-8765-4321"
-        }
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
-    reservation = data.get('reservation')
-    rejected_user = data.get('rejected_user')
-
-    if not user_email or not reservation or not rejected_user:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_reject_request_email(user_email, reservation, rejected_user)
-        if success:
-            return jsonify({'status': 'success', 'message': 'リクエスト拒否メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': 'リクエスト拒否メールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"リクエスト拒否メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': 'リクエスト拒否メールの送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_reject_request_to_sender_email', methods=['POST'])
-@login_required
-def api_send_reject_request_to_sender_email():
-    """
-    リクエスト送信者に拒否メールを送信します。
-    リクエストボディ例:
-    {
-        "requester_email": "requester@example.com",
-        "reservation": {
-            "date": "2024-05-01",
-            "start_time": "10:00",
-            "end_time": "12:00"
-        },
-        "rejected_user_email": "rejected_user@example.com"
-    }
-    """
-    data = request.get_json()
-    requester_email = data.get('requester_email')
-    reservation = data.get('reservation')
-    rejected_user_email = data.get('rejected_user_email')
-
-    if not requester_email or not reservation or not rejected_user_email:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_reject_request_to_sender_email(requester_email, reservation, rejected_user_email)
-        if success:
-            return jsonify({'status': 'success', 'message': 'リクエスト送信者への拒否メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': 'リクエスト送信者への拒否メールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"リクエスト送信者への拒否メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': 'リクエスト送信者への拒否メール送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_reservation_confirmation_email', methods=['POST'])
-@login_required
-def api_send_reservation_confirmation_email():
-    """
-    ユーザーに予約確認メールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "user@example.com",
-        "date": "2024-05-01",
-        "time_slot": "10:00 ~ 12:00"
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
-    date = data.get('date')
-    time_slot = data.get('time_slot')
-
-    if not user_email or not date or not time_slot:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_reservation_confirmation_email(user_email, date, time_slot)
-        if success:
-            return jsonify({'status': 'success', 'message': '予約確認メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': '予約確認メールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"予約確認メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '予約確認メールの送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_lecture_confirmation_email', methods=['POST'])
-@login_required
-def api_send_lecture_confirmation_email():
-    """
-    レクチャー担当者にレクチャー確認メールを送信します。
-    リクエストボディ例:
-    {
-        "lecturer_email": "lecturer@example.com",
-        "date": "2024-05-01",
-        "time_slot": "10:00 ~ 12:00"
-    }
-    """
-    data = request.get_json()
-    lecturer_email = data.get('lecturer_email')
-    date = data.get('date')
-    time_slot = data.get('time_slot')
-
-    if not lecturer_email or not date or not time_slot:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_lecture_confirmation_email(lecturer_email, date, time_slot)
-        if success:
-            return jsonify({'status': 'success', 'message': 'レクチャー確認メールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': 'レクチャー確認メールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"レクチャー確認メール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': 'レクチャー確認メールの送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_cancel_reservation_email', methods=['POST'])
-@login_required
-def api_send_cancel_reservation_email():
-    """
-    ユーザーに予約キャンセルメールを送信します。
-    リクエストボディ例:
-    {
-        "user_email": "user@example.com",
-        "reservation": {
-            "date": "2024-05-01",
-            "start_time": "10:00",
-            "end_time": "12:00"
-        }
-    }
-    """
-    data = request.get_json()
-    user_email = data.get('user_email')
-    reservation = data.get('reservation')
-
-    if not user_email or not reservation:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_cancel_reservation_email(user_email, reservation)
-        if success:
-            return jsonify({'status': 'success', 'message': '予約キャンセルメールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': '予約キャンセルメールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"予約キャンセルメール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '予約キャンセルメールの送信中にエラーが発生しました。'}), 500
-
-
-@api_email_notifications_bp.route('/send_new_message_email', methods=['POST'])
-@login_required
-def api_send_new_message_email():
-    """
-    ユーザーに新規メッセージメールを送信します。
-    リクエストボディ例:
-    {
-        "to_email": "recipient@example.com",
-        "company_name": "株式会社ABC"
-    }
-    """
-    data = request.get_json()
-    to_email = data.get('to_email')
-    company_name = data.get('company_name')
-
-    if not to_email or not company_name:
-        return jsonify({'status': 'error', 'message': '必要なフィールドが不足しています。'}), 400
-
-    try:
-        success = send_new_message_email(to_email, company_name)
-        if success:
-            return jsonify({'status': 'success', 'message': '新規メッセージメールが送信されました。'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': '新規メッセージメールの送信に失敗しました。'}), 500
-    except Exception as e:
-        logger.error(f"新規メッセージメール送信中にエラーが発生しました: {e}")
-        return jsonify({'status': 'error', 'message': '新規メッセージメールの送信中にエラーが発生しました。'}), 500
-
+        current_app.logger.error(f"メール送信エラー: {e}")
+        return False

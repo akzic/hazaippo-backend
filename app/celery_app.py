@@ -1,49 +1,48 @@
 # app/celery_app.py
+from __future__ import annotations
 
-from celery import Celery
 import logging
 import os
-from flask import Flask
-from config import Config
-from app import create_app  # Flaskアプリケーションのファクトリ関数をインポート
+from celery import Celery
 
-# ロギングの設定
+# ───────── ロギング ─────────
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-# 環境変数またはデフォルト値から設定を取得
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+# ───────── Celery インスタンス ─────────
+CELERY_BROKER_URL     = os.getenv("CELERY_BROKER_URL",     "redis://redis:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
 
-# Celeryインスタンスの作成と設定
 celery = Celery(
-    'app',
+    "app",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
-    include=['app.tasks.camera_tasks']  # タスクモジュールを明示的に指定
 )
 
-logger.info("Celeryが初期化され、タスクが登録されました。")
+# “tasks.” 配下を自動検出（include を増やし忘れても OK）
+celery.autodiscover_tasks(["app.tasks"])
 
-def init_celery(app):
-    """
-    FlaskアプリケーションとCeleryを連携させる関数。
-    """
-    celery.conf.update(app.config)
+logger.info("Celery が初期化されました（ブローカー: %s）", CELERY_BROKER_URL)
 
-    # タスク実行時にFlaskのアプリケーションコンテキストを利用
+
+# ───────── Flask アプリから呼び出す関数 ─────────
+def init_celery(flask_app):
+    """
+    Flask → create_app() 完了後に呼び出して Flask コンテキストを噛ませる。
+    例:
+        app = create_app()
+        init_celery(app)
+    """
+    celery.conf.update(flask_app.config)
+
     class ContextTask(celery.Task):
+        abstract = True  # ★ これで継承専用になる
         def __call__(self, *args, **kwargs):
-            with app.app_context():
-                return self.run(*args, **kwargs)
+            with flask_app.app_context():
+                return super().__call__(*args, **kwargs)
 
     celery.Task = ContextTask
-
-# Flaskアプリケーションを初期化し、Celeryを設定
-app = create_app(Config)
-init_celery(app)

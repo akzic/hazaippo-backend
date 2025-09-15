@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メインメニュー - はざいっぽ</title>
+    <link rel="stylesheet" href="dashbo>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    {% include 'header.html' %}
+
+     Flash Messages 
+    <div class="flash-messages">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            <i class="fas fa-info-circle"></i>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-tachometer-alt"></i>メインメニュー</h1>
+            <p class="page-subtitle">資材の共有・取引プラットフォーム</p>
+        </div>
+
+         Terminal Section 
+        <section class="dashboard-section">
+            <div class="section-header">
+                <h2><i class="fas fa-desktop"></i>ターミナルを利用する</h2>
+            </div>
+            <div class="card-grid">
+                <a href="{{ url_for('terminal.search_terminal') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h3>ターミナル検索</h3>
+                    <p>利用可能なターミナルを検索</p>
+                </a>
+                <a href="{{ url_for('terminal.reservation_confirm', reservation_id=1) }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    <h3>予約確認</h3>
+                    <p>ターミナル予約状況を確認</p>
+                </a>
+                <a href="{{ url_for('terminal.video_viewing') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-play-circle"></i>
+                    </div>
+                    <h3>動画閲覧</h3>
+                    <p>操作方法や事例を動画で確認</p>
+                </a>
+            </div>
+        </section>
+
+         Group Section 
+        <section class="dashboard-section">
+            <div class="section-header">
+                <h2><i class="fas fa-users"></i>グループで利用する</h2>
+            </div>
+            <div class="card-grid">
+                <a href="{{ url_for('groups.index') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <h3>作成・編集・削除</h3>
+                    <p>グループの管理を行う</p>
+                </a>
+                <a href="{{ url_for('groups.join') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-user-plus"></i>
+                    </div>
+                    <h3>参加・退会</h3>
+                    <p>グループへの参加・退会</p>
+                </a>
+                <a href="{{ url_for('materials.materials_management') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-boxes"></i>
+                    </div>
+                    <h3>グループ在庫管理</h3>
+                    <p>グループの材料在庫を管理</p>
+                </a>
+            </div>
+        </section>
+
+         Provide Materials Section 
+        <section class="dashboard-section">
+            <div class="section-header">
+                <h2><i class="fas fa-hand-holding"></i>資材を提供したい</h2>
+            </div>
+            <div class="card-grid">
+                <a href="{{ url_for('materials.register_material') }}" class="action-card primary">
+                    <div class="card-icon">
+                        <i class="fas fa-plus-circle"></i>
+                    </div>
+                    <h3>提供する資材登録</h3>
+                    <p>新しい資材を登録して提供</p>
+                </a>
+                <a href="{{ url_for('site.register') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </div>
+                    <h3>現場登録</h3>
+                    <p>材料提供場所を登録</p>
+                </a>
+                <a href="{{ url_for('search.search_wanted_materials') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-search-plus"></i>
+                    </div>
+                    <h3>材料を必要としている人を検索</h3>
+                    <p>需要のある材料を確認</p>
+                </a>
+                <a href="{{ url_for('materials.material_list') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-list"></i>
+                    </div>
+                    <h3>提供資材一覧</h3>
+                    <p>登録済みの提供材料を確認</p>
+                </a>
+            </div>
+
+            {% if matched_materials %}
+            <div class="status-section">
+                <h3><i class="fas fa-handshake"></i>マッチ履歴（未完了・提供資材）</h3>
+                <div class="material-list">
+                    {% for material in matched_materials %}
+                        {% set accepted_req = material.requests | selectattr('status', 'equalto', 'Accepted') | list | first %}
+                        {% set is_receiver = accepted_req and accepted_req.requested_user_id == current_user.id %}
+                        {% set is_sender   = accepted_req and accepted_req.requester_user_id == current_user.id %}
+
+                        <div class="material-card">
+                            <div class="material-image">
+                                {% if material.image and material.image != 'no_image.png' %}
+                                    <img src="{{ material.image.startswith('http') and material.image or url_for('static', filename='uploads/' ~ material.image) }}" alt="提供資材画像">
+                                {% else %}
+                                    <img src="{{ url_for('static', filename='img/no_image.png') }}" alt="画像なし">
+                                {% endif %}
+                            </div>
+                            <div class="material-info">
+                                <div class="material-header">
+                                    <h4>{{ material.type }}</h4>
+                                    <span class="material-status">
+                                        {% if not material.pre_completed %}
+                                            <i class="fas fa-clock text-warning"></i> 進行中
+                                        {% elif not material.completed %}
+                                            <i class="fas fa-hourglass-half text-info"></i> 一次完了
+                                        {% else %}
+                                            <i class="fas fa-check-circle text-success"></i> 完了済み
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                
+                                <div class="material-details">
+                                    {% if material.type == "木材" and material.wood_type %}
+                                        <p><i class="fas fa-tree"></i> 木材の種類: {{ material.wood_type }}</p>
+                                    {% elif material.type == "ボード材" and material.board_material_type %}
+                                        <p><i class="fas fa-square"></i> ボード材の種類: {{ material.board_material_type }}</p>
+                                    {% elif material.type == "パネル材" and material.panel_type %}
+                                        <p><i class="fas fa-th-large"></i> パネル材の種類: {{ material.panel_type }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-ruler-combined"></i> サイズ: {{ material.size_1 }}×{{ material.size_2 }}×{{ material.size_3 }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> 受け渡し場所: {{ material.m_prefecture }} {{ material.m_city }} {{ material.m_address }}</p>
+                                    <p><i class="fas fa-cubes"></i> 数量: {{ material.quantity }}</p>
+                                    <p><i class="fas fa-calendar"></i> 締切日: {{ material.deadline.strftime('%Y-%m-%d') if material.deadline else '未設定' }}</p>
+                                    <p><i class="fas fa-calendar-times"></i> 土日受け渡し: {{ '不可' if material.exclude_weekends else '可能' }}</p>
+                                    {% if material.note %}
+                                        <p><i class="fas fa-sticky-note"></i> 備考: {{ material.note }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-clock"></i> マッチ日時: {{ material.matched_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                                </div>
+
+                                {% if accepted_req and accepted_req.requester_user %}
+                                <div class="requester-info">
+                                    <h5><i class="fas fa-building"></i> リクエスト送信者</h5>
+                                    <p>{{ accepted_req.requester_user.company_name }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> {{ accepted_req.requester_user.prefecture }} {{ accepted_req.requester_user.city }} {{ accepted_req.requester_user.address }}</p>
+                                    <p><i class="fas fa-industry"></i> {{ accepted_req.requester_user.industry }}</p>
+                                    <p><i class="fas fa-user-tie"></i> {{ accepted_req.requester_user.job_title }}</p>
+                                </div>
+                                {% endif %}
+
+                                <div class="material-actions">
+                                    {% if not material.pre_completed %}
+                                        {% if is_receiver %}
+                                            <form method="POST" action="{{ url_for('requests_bp.pre_complete_material', material_id=material.id) }}">
+                                                {{ complete_match_form.hidden_tag() }}
+                                                {{ complete_match_form.submit(class="btn btn-primary", value="取引を一次完了する") }}
+                                            </form>
+                                        {% elif is_sender %}
+                                            <span class="status-badge waiting">受け渡し後リクエスト承諾者が完了にするのをお待ちください</span>
+                                        {% endif %}
+                                    {% elif not material.completed %}
+                                        {% if is_receiver %}
+                                            <span class="status-badge waiting">リクエスト送信者が完了するまでお待ちください</span>
+                                        {% elif is_sender %}
+                                            <form method="POST" action="{{ url_for('requests_bp.finalize_material', req_id=accepted_req.id) }}">
+                                                {{ complete_match_form.hidden_tag() }}
+                                                {{ complete_match_form.submit(class="btn btn-success", value="取引を最終完了する") }}
+                                            </form>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="status-badge completed">完了済み</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if received_requests_materials %}
+            <div class="status-section">
+                <h3><i class="fas fa-inbox"></i>届いたリクエスト（提供資材）</h3>
+                <div class="material-list">
+                    {% for req in received_requests_materials %}
+                        <div class="material-card">
+                            <div class="material-image">
+                                {% if req.material.image and req.material.image != 'no_image.png' %}
+                                    <img src="{{ req.material.image.startswith('http') and req.material.image or url_for('static', filename='uploads/' ~ req.material.image) }}" alt="提供資材画像">
+                                {% else %}
+                                    <img src="{{ url_for('static', filename='img/no_image.png') }}" alt="画像なし">
+                                {% endif %}
+                            </div>
+                            <div class="material-info">
+                                <div class="material-header">
+                                    <h4>{{ req.material.type }}</h4>
+                                    <span class="status-badge pending">新着リクエスト</span>
+                                </div>
+                                
+                                <div class="material-details">
+                                    {% if req.material.type == "木材" and req.material.wood_type %}
+                                        <p><i class="fas fa-tree"></i> 木材の種類: {{ req.material.wood_type }}</p>
+                                    {% elif req.material.type == "ボード材" and req.material.board_material_type %}
+                                        <p><i class="fas fa-square"></i> ボード材の種類: {{ req.material.board_material_type }}</p>
+                                    {% elif req.material.type == "パネル材" and req.material.panel_type %}
+                                        <p><i class="fas fa-th-large"></i> パネル材の種類: {{ req.material.panel_type }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-ruler-combined"></i> サイズ: {{ req.material.size_1 }}×{{ req.material.size_2 }}×{{ req.material.size_3 }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> 受け渡し場所: {{ req.material.m_prefecture }} {{ req.material.m_city }} {{ req.material.m_address }}</p>
+                                    <p><i class="fas fa-cubes"></i> 数量: {{ req.material.quantity }}</p>
+                                    <p><i class="fas fa-calendar"></i> 締切日: {{ req.material.deadline.strftime('%Y-%m-%d') if req.material.deadline else '未設定' }}</p>
+                                    <p><i class="fas fa-calendar-times"></i> 土日受け渡し: {{ '不可' if req.material.exclude_weekends else '可能' }}</p>
+                                    {% if req.material.note %}
+                                        <p><i class="fas fa-sticky-note"></i> 備考: {{ req.material.note }}</p>
+                                    {% endif %}
+                                </div>
+
+                                <div class="requester-info">
+                                    <h5><i class="fas fa-user"></i> リクエスト送信者</h5>
+                                    <p><i class="fas fa-industry"></i> {{ req.requester_user.industry }}</p>
+                                    <p><i class="fas fa-user-tie"></i> {{ req.requester_user.job_title }}</p>
+                                </div>
+
+                                <div class="material-actions">
+                                    <form method="POST" action="{{ url_for('requests_bp.accept_request_material', request_id=req.id) }}">
+                                        {{ accept_request_material_form.hidden_tag() }}
+                                        {{ accept_request_material_form.submit(class="btn btn-success", value="リクエストを承諾") }}
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if sent_requests_wanted %}
+            <div class="status-section">
+                <h3><i class="fas fa-paper-plane"></i>送信リクエスト（欲しい資材）</h3>
+                <div class="material-list">
+                    {% for req in sent_requests_wanted %}
+                        <div class="material-card">
+                            <div class="material-image">
+                                {% if req.wanted_material.image and req.wanted_material.image != 'no_image.png' %}
+                                    <img src="{{ req.wanted_material.image.startswith('http') and req.wanted_material.image or url_for('static', filename='uploads/' ~ req.wanted_material.image) }}" alt="欲しい資材画像">
+                                {% else %}
+                                    <img src="{{ url_for('static', filename='img/no_image.png') }}" alt="画像なし">
+                                {% endif %}
+                            </div>
+                            <div class="material-info">
+                                <div class="material-header">
+                                    <h4>{{ req.wanted_material.type }}</h4>
+                                    <span class="status-badge sent">送信済み</span>
+                                </div>
+                                
+                                <div class="provider-info">
+                                    <h5><i class="fas fa-building"></i> 提供ユーザー</h5>
+                                    <p>{{ req.wanted_material.owner.company_name }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> {{ req.wanted_material.owner.prefecture }} {{ req.wanted_material.owner.city }} {{ req.wanted_material.owner.address }}</p>
+                                </div>
+
+                                <div class="material-details">
+                                    {% if req.wanted_material.type == "木材" and req.wanted_material.wood_type %}
+                                        <p><i class="fas fa-tree"></i> 木材の種類: {{ req.wanted_material.wood_type }}</p>
+                                    {% elif req.wanted_material.type == "ボード材" and req.wanted_material.board_material_type %}
+                                        <p><i class="fas fa-square"></i> ボード材の種類: {{ req.wanted_material.board_material_type }}</p>
+                                    {% elif req.wanted_material.type == "パネル材" and req.wanted_material.panel_type %}
+                                        <p><i class="fas fa-th-large"></i> パネル材の種類: {{ req.wanted_material.panel_type }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-ruler-combined"></i> サイズ: {{ req.wanted_material.size_1 }}×{{ req.wanted_material.size_2 }}×{{ req.wanted_material.size_3 }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> 受け渡し場所: {{ req.wanted_material.wm_prefecture }} {{ req.wanted_material.wm_city }} {{ req.wanted_material.wm_address }}</p>
+                                    <p><i class="fas fa-cubes"></i> 数量: {{ req.wanted_material.quantity }}</p>
+                                    <p><i class="fas fa-calendar"></i> 締切日: {{ req.wanted_material.deadline.strftime('%Y-%m-%d') if req.wanted_material.deadline else '未設定' }}</p>
+                                    <p><i class="fas fa-calendar-times"></i> 土日受け渡し: {{ '不可' if req.wanted_material.exclude_weekends else '可能' }}</p>
+                                    {% if req.wanted_material.note %}
+                                        <p><i class="fas fa-sticky-note"></i> 備考: {{ req.wanted_material.note }}</p>
+                                    {% endif %}
+                                </div>
+
+                                <div class="material-actions">
+                                    <form method="POST" action="{{ url_for('requests_bp.cancel_request', request_id=req.id) }}">
+                                        {{ cancel_request_form.hidden_tag() }}
+                                        {{ cancel_request_form.submit(class="btn btn-secondary", value="リクエスト取り消し") }}
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+         Want Materials Section 
+        <section class="dashboard-section">
+            <div class="section-header">
+                <h2><i class="fas fa-search"></i>資材が欲しい</h2>
+            </div>
+            <div class="card-grid">
+                <a href="{{ url_for('materials.register_wanted') }}" class="action-card primary">
+                    <div class="card-icon">
+                        <i class="fas fa-plus-circle"></i>
+                    </div>
+                    <h3>欲しい資材登録</h3>
+                    <p>必要な資材を登録して募集</p>
+                </a>
+                <a href="{{ url_for('search.search_materials') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h3>欲しい資材を検索</h3>
+                    <p>利用可能な資材を検索</p>
+                </a>
+                <a href="{{ url_for('materials.material_wanted_list') }}" class="action-card">
+                    <div class="card-icon">
+                        <i class="fas fa-list"></i>
+                    </div>
+                    <h3>欲しい資材一覧</h3>
+                    <p>登録済みの希望材料を確認</p>
+                </a>
+            </div>
+
+            {% if matched_wanted_materials %}
+            <div class="status-section">
+                <h3><i class="fas fa-handshake"></i>マッチ履歴（未完了・欲しい資材）</h3>
+                <div class="material-list">
+                    {% for wanted in matched_wanted_materials %}
+                        {% set accepted_req_w = wanted.requests | selectattr('status', 'equalto', 'Accepted') | list | first %}
+                        {% set is_receiver_w = accepted_req_w and accepted_req_w.requested_user_id == current_user.id %}
+                        {% set is_sender_w   = accepted_req_w and accepted_req_w.requester_user_id == current_user.id %}
+
+                        <div class="material-card">
+                            <div class="material-image">
+                                {% if wanted.image and wanted.image != 'no_image.png' %}
+                                    <img src="{{ wanted.image.startswith('http') and wanted.image or url_for('static', filename='uploads/' ~ wanted.image) }}" alt="欲しい資材画像">
+                                {% else %}
+                                    <img src="{{ url_for('static', filename='img/no_image.png') }}" alt="画像なし">
+                                {% endif %}
+                            </div>
+                            <div class="material-info">
+                                <div class="material-header">
+                                    <h4>{{ wanted.type }}</h4>
+                                    <span class="material-status">
+                                        {% if not wanted.pre_completed %}
+                                            <i class="fas fa-clock text-warning"></i> 進行中
+                                        {% elif not wanted.completed %}
+                                            <i class="fas fa-hourglass-half text-info"></i> 一次完了
+                                        {% else %}
+                                            <i class="fas fa-check-circle text-success"></i> 完了済み
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                
+                                <div class="material-details">
+                                    {% if wanted.type == "木材" and wanted.wood_type %}
+                                        <p><i class="fas fa-tree"></i> 木材の種類: {{ wanted.wood_type }}</p>
+                                    {% elif wanted.type == "ボード材" and wanted.board_material_type %}
+                                        <p><i class="fas fa-square"></i> ボード材の種類: {{ wanted.board_material_type }}</p>
+                                    {% elif wanted.type == "パネル材" and wanted.panel_type %}
+                                        <p><i class="fas fa-th-large"></i> パネル材の種類: {{ wanted.panel_type }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-ruler-combined"></i> サイズ: {{ wanted.size_1 }}×{{ wanted.size_2 }}×{{ wanted.size_3 }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> 受け渡し場所: {{ wanted.wm_prefecture }} {{ wanted.wm_city }} {{ wanted.wm_address }}</p>
+                                    <p><i class="fas fa-cubes"></i> 数量: {{ wanted.quantity }}</p>
+                                    <p><i class="fas fa-calendar"></i> 締切日: {{ wanted.deadline.strftime('%Y-%m-%d') if wanted.deadline else '未設定' }}</p>
+                                    <p><i class="fas fa-calendar-times"></i> 土日受け渡し: {{ '不可' if wanted.exclude_weekends else '可能' }}</p>
+                                    {% if wanted.note %}
+                                        <p><i class="fas fa-sticky-note"></i> 備考: {{ wanted.note }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-clock"></i> マッチ日時: {{ wanted.matched_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                                </div>
+
+                                {% if accepted_req_w and accepted_req_w.requester_user %}
+                                <div class="requester-info">
+                                    <h5><i class="fas fa-building"></i> リクエスト送信者</h5>
+                                    <p>{{ accepted_req_w.requester_user.company_name }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> {{ accepted_req_w.requester_user.prefecture }} {{ accepted_req_w.requester_user.city }} {{ accepted_req_w.requester_user.address }}</p>
+                                    <p><i class="fas fa-industry"></i> {{ accepted_req_w.requester_user.industry }}</p>
+                                    <p><i class="fas fa-user-tie"></i> {{ accepted_req_w.requester_user.job_title }}</p>
+                                </div>
+                                {% endif %}
+
+                                <div class="material-actions">
+                                    {% if not wanted.pre_completed %}
+                                        {% if is_receiver_w %}
+                                            <form method="POST" action="{{ url_for('requests_bp.pre_complete_wanted', wanted_material_id=wanted.id) }}">
+                                                {{ complete_match_form.hidden_tag() }}
+                                                {{ complete_match_form.submit(class="btn btn-primary", value="取引を一次完了する") }}
+                                            </form>
+                                        {% elif is_sender_w %}
+                                            <span class="status-badge waiting">受け渡し後リクエスト承諾者が完了にするのをお待ちください</span>
+                                        {% endif %}
+                                    {% elif not wanted.completed %}
+                                        {% if is_receiver_w %}
+                                            <span class="status-badge waiting">リクエスト送信者が完了するまでお待ちください</span>
+                                        {% elif is_sender_w %}
+                                            <form method="POST" action="{{ url_for('requests_bp.finalize_wanted', req_id=accepted_req_w.id) }}">
+                                                {{ complete_match_form.hidden_tag() }}
+                                                {{ complete_match_form.submit(class="btn btn-success", value="取引を最終完了する") }}
+                                            </form>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="status-badge completed">完了済み</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if received_requests_wanted_materials %}
+            <div class="status-section">
+                <h3><i class="fas fa-inbox"></i>届いたリクエスト（欲しい資材）</h3>
+                <div class="material-list">
+                    {% for req in received_requests_wanted_materials %}
+                        <div class="material-card">
+                            <div class="material-image">
+                                {% if req.wanted_material.image and req.wanted_material.image != 'no_image.png' %}
+                                    <img src="{{ req.wanted_material.image.startswith('http') and req.wanted_material.image or url_for('static', filename='uploads/' ~ req.wanted_material.image) }}" alt="欲しい資材画像">
+                                {% else %}
+                                    <img src="{{ url_for('static', filename='img/no_image.png') }}" alt="画像なし">
+                                {% endif %}
+                            </div>
+                            <div class="material-info">
+                                <div class="material-header">
+                                    <h4>{{ req.wanted_material.type }}</h4>
+                                    <span class="status-badge pending">新着リクエスト</span>
+                                </div>
+                                
+                                <div class="material-details">
+                                    {% if req.wanted_material.type == "木材" and req.wanted_material.wood_type %}
+                                        <p><i class="fas fa-tree"></i> 木材の種類: {{ req.wanted_material.wood_type }}</p>
+                                    {% elif req.wanted_material.type == "ボード材" and req.wanted_material.board_material_type %}
+                                        <p><i class="fas fa-square"></i> ボード材の種類: {{ req.wanted_material.board_material_type }}</p>
+                                    {% elif req.wanted_material.type == "パネル材" and req.wanted_material.panel_type %}
+                                        <p><i class="fas fa-th-large"></i> パネル材の種類: {{ req.wanted_material.panel_type }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-ruler-combined"></i> サイズ: {{ req.wanted_material.size_1 }}×{{ req.wanted_material.size_2 }}×{{ req.wanted_material.size_3 }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> 受け渡し場所: {{ req.wanted_material.wm_prefecture }} {{ req.wanted_material.wm_city }} {{ req.wanted_material.wm_address }}</p>
+                                    <p><i class="fas fa-cubes"></i> 数量: {{ req.wanted_material.quantity }}</p>
+                                    <p><i class="fas fa-calendar"></i> 締切日: {{ req.wanted_material.deadline.strftime('%Y-%m-%d') if req.wanted_material.deadline else '未設定' }}</p>
+                                    <p><i class="fas fa-calendar-times"></i> 土日受け渡し: {{ '不可' if req.wanted_material.exclude_weekends else '可能' }}</p>
+                                    {% if req.wanted_material.note %}
+                                        <p><i class="fas fa-sticky-note"></i> 備考: {{ req.wanted_material.note }}</p>
+                                    {% endif %}
+                                </div>
+
+                                <div class="requester-info">
+                                    <h5><i class="fas fa-user"></i> リクエスト送信者</h5>
+                                    <p><i class="fas fa-industry"></i> {{ req.requester_user.industry }}</p>
+                                    <p><i class="fas fa-user-tie"></i> {{ req.requester_user.job_title }}</p>
+                                </div>
+
+                                <div class="material-actions">
+                                    <form method="POST" action="{{ url_for('requests_bp.accept_request_wanted', request_id=req.id) }}">
+                                        {{ accept_request_wanted_form.hidden_tag() }}
+                                        {{ accept_request_wanted_form.submit(class="btn btn-success", value="リクエストを承諾") }}
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if sent_requests_materials %}
+            <div class="status-section">
+                <h3><i class="fas fa-paper-plane"></i>送信リクエスト（提供資材）</h3>
+                <div class="material-list">
+                    {% for req in sent_requests_materials %}
+                        <div class="material-card">
+                            <div class="material-image">
+                                {% if req.material.image and req.material.image != 'no_image.png' %}
+                                    <img src="{{ req.material.image.startswith('http') and req.material.image or url_for('static', filename='uploads/' ~ req.material.image) }}" alt="提供資材画像">
+                                {% else %}
+                                    <img src="{{ url_for('static', filename='img/no_image.png') }}" alt="画像なし">
+                                {% endif %}
+                            </div>
+                            <div class="material-info">
+                                <div class="material-header">
+                                    <h4>{{ req.material.type }}</h4>
+                                    <span class="status-badge sent">送信済み</span>
+                                </div>
+                                
+                                <div class="provider-info">
+                                    <h5><i class="fas fa-building"></i> 提供ユーザー</h5>
+                                    <p>{{ req.material.owner.company_name }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> {{ req.material.owner.prefecture }} {{ req.material.owner.city }} {{ req.material.owner.address }}</p>
+                                </div>
+
+                                <div class="material-details">
+                                    {% if req.material.type == "木材" and req.material.wood_type %}
+                                        <p><i class="fas fa-tree"></i> 木材の種類: {{ req.material.wood_type }}</p>
+                                    {% elif req.material.type == "ボード材" and req.material.board_material_type %}
+                                        <p><i class="fas fa-square"></i> ボード材の種類: {{ req.material.board_material_type }}</p>
+                                    {% elif req.material.type == "パネル材" and req.material.panel_type %}
+                                        <p><i class="fas fa-th-large"></i> パネル材の種類: {{ req.material.panel_type }}</p>
+                                    {% endif %}
+                                    <p><i class="fas fa-ruler-combined"></i> サイズ: {{ req.material.size_1 }}×{{ req.material.size_2 }}×{{ req.material.size_3 }}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> 受け渡し場所: {{ req.material.m_prefecture }} {{ req.material.m_city }} {{ req.material.m_address }}</p>
+                                    <p><i class="fas fa-cubes"></i> 数量: {{ req.material.quantity }}</p>
+                                    <p><i class="fas fa-calendar"></i> 締切日: {{ req.material.deadline.strftime('%Y-%m-%d') if req.material.deadline else '未設定' }}</p>
+                                    <p><i class="fas fa-calendar-times"></i> 土日受け渡し: {{ '不可' if req.material.exclude_weekends else '可能' }}</p>
+                                    {% if req.material.note %}
+                                        <p><i class="fas fa-sticky-note"></i> 備考: {{ req.material.note }}</p>
+                                    {% endif %}
+                                </div>
+
+                                <div class="material-actions">
+                                    <form method="POST" action="{{ url_for('requests_bp.cancel_request', request_id=req.id) }}">
+                                        {{ cancel_request_form.hidden_tag() }}
+                                        {{ cancel_request_form.submit(class="btn btn-secondary", value="リクエスト取り消し") }}
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+         Same Location Users 
+        {% if same_location_users %}
+        <section class="dashboard-section">
+            <div class="section-header">
+                <h2><i class="fas fa-building"></i>会社内ユーザー一覧（同所在地）</h2>
+            </div>
+            <div class="user-list">
+                {% for user in same_location_users %}
+                    <div class="user-card">
+                        <i class="fas fa-user"></i>
+                        <span>{{ user.contact_name }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

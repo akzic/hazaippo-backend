@@ -136,7 +136,7 @@ def delete_reservation(reservation_id):
         return jsonify({'status': 'error', 'message': '予約の削除中にエラーが発生しました。'}), 500
 
 
-# ターミナル端材管理
+# ターミナル資材管理
 @terminal_management_bp.route('/material/management', methods=['GET', 'POST'])
 @login_required
 def terminal_material_management():
@@ -162,22 +162,22 @@ def terminal_material_management():
 
         material = Material.query.get(material_id)
         if not material:
-            flash('指定された端材が見つかりません。', 'danger')
+            flash('指定された資材が見つかりません。', 'danger')
             return redirect(url_for('terminal_management.terminal_material_management'))
 
         if not (material.user_id == current_user.id or current_user.is_terminal_admin):
-            flash('この端材を編集または削除する権限がありません。', 'danger')
+            flash('この資材を編集または削除する権限がありません。', 'danger')
             return redirect(url_for('terminal_management.terminal_material_management'))
 
         if action == 'delete':
             try:
                 db.session.delete(material)
                 db.session.commit()
-                flash('端材が削除されました。', 'success')
+                flash('資材が削除されました。', 'success')
             except Exception as e:
                 db.session.rollback()
-                logging.error(f"端材削除中にエラーが発生しました: {e}", exc_info=True)
-                flash('端材の削除中にエラーが発生しました。', 'danger')
+                logging.error(f"資材削除中にエラーが発生しました: {e}", exc_info=True)
+                flash('資材の削除中にエラーが発生しました。', 'danger')
 
         elif action == 'edit':
             # 編集処理を実装
@@ -198,14 +198,14 @@ def terminal_material_management():
                 material.location = location if location else material.location  # Update only if provided
                 material.note = note if note else material.note          # Update only if provided
                 db.session.commit()
-                flash('端材が更新されました。', 'success')
+                flash('資材が更新されました。', 'success')
             except ValueError:
                 db.session.rollback()
                 flash('数量は数値でなければなりません。', 'danger')
             except Exception as e:
                 db.session.rollback()
-                logging.error(f"端材更新中にエラーが発生しました: {e}", exc_info=True)
-                flash('端材の更新中にエラーが発生しました。', 'danger')
+                logging.error(f"資材更新中にエラーが発生しました: {e}", exc_info=True)
+                flash('資材の更新中にエラーが発生しました。', 'danger')
 
         return redirect(url_for('terminal_management.terminal_material_management'))
 
@@ -218,10 +218,10 @@ def terminal_material_management():
 def update_material(material_id):
     material = Material.query.get(material_id)
     if not material:
-        return jsonify({'status': 'error', 'message': '指定された端材が見つかりません。'}), 404
+        return jsonify({'status': 'error', 'message': '指定された資材が見つかりません。'}), 404
 
     if not (material.user_id == current_user.id or current_user.is_terminal_admin):
-        return jsonify({'status': 'error', 'message': 'この端材を編集する権限がありません。'}), 403
+        return jsonify({'status': 'error', 'message': 'この資材を編集する権限がありません。'}), 403
 
     # CSRF トークンの検証は Flask-WTF によって自動的に行われます
 
@@ -267,11 +267,11 @@ def update_material(material_id):
         if note:
             material.note = note
         db.session.commit()
-        return jsonify({'status': 'success', 'message': '端材が更新されました。'})
+        return jsonify({'status': 'success', 'message': '資材が更新されました。'})
     except ValueError:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': '数量は数値でなければなりません。'}), 400
     except Exception as e:
         db.session.rollback()
-        logging.error(f"端材更新中にエラーが発生しました: {e}", exc_info=True)
-        return jsonify({'status': 'error', 'message': '端材の更新中にエラーが発生しました。'}), 500
+        logging.error(f"資材更新中にエラーが発生しました: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': '資材の更新中にエラーが発生しました。'}), 500

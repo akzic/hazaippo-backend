@@ -4,12 +4,12 @@ from flask import Blueprint, render_template, flash, redirect, request, url_for,
 from app import db
 from app.models import Material, WantedMaterial, Request, User
 from app.forms import (
-    RequestMaterialForm, 
+    RequestMaterialForm,
     RequestWantedMaterialForm,
     CompleteMatchForm,
     AcceptRequestMaterialForm,
     AcceptRequestWantedForm,
-    CancelRequestForm  # 追加
+    CancelRequestForm
 )
 from datetime import datetime
 from flask_login import login_required, current_user
@@ -22,8 +22,10 @@ from app.blueprints.email_notifications import (
     send_accept_request_wanted_email,
     send_accept_request_wanted_to_sender_email
 )
+from sqlalchemy.orm import joinedload
 import logging
 import pytz
+from app.utils.push import send_request_push, send_accept_push, send_precomplete_push, send_complete_push
 
 requests_bp = Blueprint('requests_bp', __name__)
 JST = pytz.timezone('Asia/Tokyo')
@@ -54,7 +56,8 @@ def request_material(material_id):
         )
         db.session.add(new_request)
         db.session.commit()
-        flash('端材のリクエストが送信されました！', 'success')
+        send_request_push(new_request)
+        flash('資材のリクエストが送信されました！', 'success')
         log_user_activity(
             current_user.id, 
             '材料リクエスト送信',
@@ -82,7 +85,8 @@ def request_material(material_id):
                 new_request.reject_other_requests()
                 
                 db.session.commit()
-                
+                send_request_push(new_request, auto_accepted=True)
+
                 # メール通知の送信
                 if not send_accept_request_email(requester=current_user, material=material, accepted_user=requested_user):
                     raise Exception("承認通知メールの送信に失敗しました。")
@@ -138,6 +142,7 @@ def request_wanted_material(wanted_material_id):
         )
         db.session.add(new_request)
         db.session.commit()
+        send_request_push(new_request)
         flash('希望材料のリクエストが送信されました！', 'success')
         log_user_activity(
             current_user.id, 
@@ -166,7 +171,8 @@ def request_wanted_material(wanted_material_id):
                 new_request.reject_other_requests()
                 
                 db.session.commit()
-                
+                send_request_push(new_request, auto_accepted=True)
+
                 # メール通知の送信
                 if not send_accept_request_wanted_email(requester=current_user, wanted_material=wanted_material, accepted_user=requested_user):
                     raise Exception("希望材料承認通知メールの送信に失敗しました。")
@@ -226,7 +232,8 @@ def accept_request_material(request_id):
         try:
             material_request.accept()
             material_request.reject_other_requests()
-            flash('リクエストを承認しました。対象の端材がマッチングしました。', 'success')
+            send_accept_push(material_request)
+            flash('リクエストを承認しました。対象の資材がマッチングしました。', 'success')
             log_user_activity(
                 current_user.id, 
                 '材料リクエスト承認',
@@ -279,6 +286,7 @@ def accept_request_wanted(request_id):
         try:
             wanted_material_request.accept()
             wanted_material_request.reject_other_requests()
+            send_accept_push(wanted_material_request)
             flash('リクエストを承認しました。対象の希望材料がマッチングしました。', 'success')
             log_user_activity(
                 current_user.id, 
@@ -305,83 +313,140 @@ def accept_request_wanted(request_id):
         flash('フォームの入力にエラーがあります。', 'danger')
         return redirect(url_for('dashboard.dashboard_home'))
 
-@requests_bp.route("/complete_match_material/<int:material_id>", methods=['POST'])
+@requests_bp.route("/pre_complete_material/<int:material_id>", methods=['POST'])
 @login_required
-def complete_match_material(material_id):
-    logging.debug(f"complete_match_material: 材料ID {material_id} の取引完了処理を開始")
+def pre_complete_material(material_id):
     form = CompleteMatchForm()
-    if form.validate_on_submit():
-        material = Material.query.get_or_404(material_id)
-        # 完了者が材料の所有者または同一の属性を持つユーザーであることを確認
-        same_location_users = User.query.filter(
-            User.company_name == current_user.company_name,
-            User.prefecture == current_user.prefecture,
-            User.city == current_user.city,
-            User.address == current_user.address
-        ).all()
-        same_location_user_ids = [user.id for user in same_location_users]
-
-        if (material.user_id != current_user.id and 
-            material.user_id not in same_location_user_ids):
-            flash('完了する権限がありません。', 'danger')
-            return redirect(url_for('dashboard.dashboard_home'))
-        
-        material.completed = True
-        material.completed_at = datetime.now(JST)
-        db.session.commit()
-        flash('対象の端材が完了しました。', 'success')
-        log_user_activity(
-            current_user.id, 
-            '材料取引完了',
-            f'ユーザーが材料ID: {material_id} の取引を完了しました。',
-            request.remote_addr, 
-            request.user_agent.string, 
-            'N/A'
-        )
-        return redirect(url_for('dashboard.dashboard_home'))
-    else:
-        logging.debug(f"フォームのバリデーションに失敗: {form.errors}")
-        flash('フォームの入力にエラーがあります。', 'danger')
+    if not form.validate_on_submit():
+        flash('フォームエラー', 'danger')
         return redirect(url_for('dashboard.dashboard_home'))
 
-@requests_bp.route("/complete_match_wanted/<int:wanted_material_id>", methods=['POST'])
+    material = Material.query.get_or_404(material_id)
+
+    # オーナー or 同一所在地ユーザのみ
+    if not _has_completion_right(material.user_id):
+        flash('完了する権限がありません。', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    # すでに一次完了していれば何もしない
+    if material.pre_completed:
+        flash('すでに一次完了済みです。', 'warning')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    material.pre_completed    = True
+    material.pre_completed_at = datetime.now(JST)
+    db.session.commit()
+    send_precomplete_push(material_request)
+
+    flash('一次完了しました。相手の完了をお待ちください。', 'success')
+    _log('材料一次完了', f'MaterialID={material_id}')
+    return redirect(url_for('dashboard.dashboard_home'))
+
+@requests_bp.route("/finalize_material/<int:req_id>", methods=['POST'])
 @login_required
-def complete_match_wanted(wanted_material_id):
-    logging.debug(f"complete_match_wanted: 希望材料ID {wanted_material_id} の取引完了処理を開始")
+def finalize_material(req_id):
     form = CompleteMatchForm()
-    if form.validate_on_submit():
-        wanted_material = WantedMaterial.query.get_or_404(wanted_material_id)
-        # 完了者が希望材料の所有者または同一の属性を持つユーザーであることを確認
-        same_location_users = User.query.filter(
-            User.company_name == current_user.company_name,
-            User.prefecture == current_user.prefecture,
-            User.city == current_user.city,
-            User.address == current_user.address
-        ).all()
-        same_location_user_ids = [user.id for user in same_location_users]
+    if not form.validate_on_submit():
+        flash('フォームエラー', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
 
-        if (wanted_material.user_id != current_user.id and 
-            wanted_material.user_id not in same_location_user_ids):
-            flash('完了する権限がありません。', 'danger')
-            return redirect(url_for('dashboard.dashboard_home'))
-        
-        wanted_material.completed = True
-        wanted_material.completed_at = datetime.now(JST)
-        db.session.commit()
-        flash('対象の希望材料が完了しました。', 'success')
-        log_user_activity(
-            current_user.id, 
-            '希望材料取引完了',
-            f'ユーザーが希望材料ID: {wanted_material_id} の取引を完了しました。',
-            request.remote_addr, 
-            request.user_agent.string, 
-            'N/A'
-        )
+    req = Request.query.options(joinedload(Request.material)).get_or_404(req_id)
+
+    # ❶ 受取側だけが呼べる  
+    if req.requester_user_id != current_user.id:
+        flash('完了する権限がありません。', 'danger')
         return redirect(url_for('dashboard.dashboard_home'))
-    else:
-        logging.debug(f"フォームのバリデーションに失敗: {form.errors}")
-        flash('フォームの入力にエラーがあります。', 'danger')
+
+    # ❷ オーナーが一次完了しているか？
+    if not req.material.pre_completed:
+        flash('まだ相手が一次完了していません。', 'warning')
         return redirect(url_for('dashboard.dashboard_home'))
+
+    # ❸ 二段階完了
+    req.material.completed    = True
+    req.material.completed_at = datetime.now(JST)
+    req.status                = 'Completed'
+    req.completed_at          = req.material.completed_at
+    db.session.commit()
+    send_complete_push(req)
+
+    flash('取引を完了しました。ありがとうございました！', 'success')
+    _log('材料最終完了', f'RequestID={req.id}')
+    return redirect(url_for('dashboard.dashboard_home'))
+
+# ───────────────────────────────────────────────
+# 1. 欲しい資材：一次完了（オーナー or 同一所在地ユーザ）
+#    URL: /pre_complete_wanted/<wanted_material_id>
+# ───────────────────────────────────────────────
+@requests_bp.route("/pre_complete_wanted/<int:wanted_material_id>", methods=['POST'])
+@login_required
+def pre_complete_wanted(wanted_material_id):
+    form = CompleteMatchForm()
+    if not form.validate_on_submit():
+        flash('フォームエラー', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    wanted = WantedMaterial.query.get_or_404(wanted_material_id)
+
+    # オーナー権限チェック
+    if not _has_completion_right(wanted.user_id):
+        flash('完了する権限がありません。', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    # 重複防止
+    if wanted.pre_completed:
+        flash('すでに一次完了済みです。', 'warning')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    wanted.pre_completed    = True
+    wanted.pre_completed_at = datetime.now(JST)
+    db.session.commit()
+    send_precomplete_push(wanted_request)
+
+    flash('一次完了しました。相手の完了をお待ちください。', 'success')
+    _log('希望材料一次完了', f'WantedMaterialID={wanted_material_id}')
+    return redirect(url_for('dashboard.dashboard_home'))
+
+
+# ───────────────────────────────────────────────
+# 2. 欲しい資材：最終完了（リクエスト送信者）
+#    URL: /finalize_wanted/<req_id>
+# ───────────────────────────────────────────────
+@requests_bp.route("/finalize_wanted/<int:req_id>", methods=['POST'])
+@login_required
+def finalize_wanted(req_id):
+    form = CompleteMatchForm()
+    if not form.validate_on_submit():
+        flash('フォームエラー', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    # リクエストを取得（WantedMaterial と requester_user を事前ロード）
+    req = Request.query.options(
+        joinedload(Request.wanted_material)
+    ).get_or_404(req_id)
+
+    # ❶ リクエスト送信者のみ実行可能
+    if req.requester_user_id != current_user.id:
+        flash('完了する権限がありません。', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    # ❷ 相手の一次完了確認
+    if not req.wanted_material.pre_completed:
+        flash('まだ相手が一次完了していません。', 'warning')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    # ❸ 二段階目の完了処理
+    now = datetime.now(JST)
+    req.wanted_material.completed    = True
+    req.wanted_material.completed_at = now
+    req.status                       = 'Completed'
+    req.completed_at                 = now
+    db.session.commit()
+    send_complete_push(req)
+
+    flash('取引を完了しました。ありがとうございました！', 'success')
+    _log('希望材料最終完了', f'RequestID={req.id}')
+    return redirect(url_for('dashboard.dashboard_home'))
 
 @requests_bp.route("/cancel_request/<int:request_id>", methods=['POST'])
 @login_required
@@ -412,3 +477,124 @@ def cancel_request(request_id):
         logging.debug(f"フォームのバリデーションに失敗: {form.errors}")
         flash('フォームの入力にエラーがあります。', 'danger')
         return redirect(url_for('dashboard.dashboard_home'))
+
+def _has_completion_right(owner_id: int) -> bool:
+    """オーナー本人または同一所在地ユーザかどうか判定"""
+    if owner_id == current_user.id:
+        return True
+    same_location_users = User.query.filter(
+        User.company_name == current_user.company_name,
+        User.prefecture   == current_user.prefecture,
+        User.city         == current_user.city,
+        User.address      == current_user.address
+    ).all()
+    return owner_id in [u.id for u in same_location_users]
+
+
+def _log(action: str, details: str):
+    """操作ログを簡単に残すヘルパー"""
+    log_user_activity(
+        current_user.id,
+        action,
+        details,
+        request.remote_addr,
+        request.user_agent.string,
+        'N/A'
+    )
+
+# ───────────────────────────────────────────────
+#   受信した「提供材料リクエスト」を拒否
+#   URL: /reject_request_material/<request_id>
+# ───────────────────────────────────────────────
+@requests_bp.route("/reject_request_material/<int:request_id>", methods=['POST'])
+@login_required
+def reject_request_material(request_id):
+    form = RejectRequestMaterialForm()
+    if not form.validate_on_submit():
+        flash('フォームエラー', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    req = Request.query.get_or_404(request_id)
+
+    # ▼ 権限チェック：受信側（requested_user）か同一所在地ユーザのみ
+    same_loc = User.query.filter(
+        User.company_name == current_user.company_name,
+        User.prefecture   == current_user.prefecture,
+        User.city         == current_user.city,
+        User.address      == current_user.address
+    ).with_entities(User.id).all()
+    same_loc_ids = [u.id for u in same_loc]
+
+    if req.requested_user_id not in ([current_user.id] + same_loc_ids):
+        flash('拒否する権限がありません。', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    if req.status != 'Pending':
+        flash('拒否できるのは保留中のリクエストのみです。', 'warning')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    try:
+        req.status      = 'Rejected'
+        req.rejected_at = datetime.now(JST)
+        db.session.commit()
+        flash('リクエストを拒否しました。', 'success')
+        log_user_activity(
+            current_user.id, '材料リクエスト拒否',
+            f'ユーザーがリクエストID: {request_id} を拒否しました。',
+            request.remote_addr, request.user_agent.string, 'N/A'
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"材料リクエスト拒否エラー: {e}", exc_info=True)
+        flash('リクエストの拒否に失敗しました。', 'danger')
+
+    return redirect(url_for('dashboard.dashboard_home'))
+
+
+# ───────────────────────────────────────────────
+#   受信した「希望材料リクエスト」を拒否
+#   URL: /reject_request_wanted/<request_id>
+# ───────────────────────────────────────────────
+@requests_bp.route("/reject_request_wanted/<int:request_id>", methods=['POST'])
+@login_required
+def reject_request_wanted(request_id):
+    form = RejectRequestWantedForm()
+    if not form.validate_on_submit():
+        flash('フォームエラー', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    req = Request.query.get_or_404(request_id)
+
+    # ▼ 権限チェック（材料側と同じロジック）
+    same_loc = User.query.filter(
+        User.company_name == current_user.company_name,
+        User.prefecture   == current_user.prefecture,
+        User.city         == current_user.city,
+        User.address      == current_user.address
+    ).with_entities(User.id).all()
+    same_loc_ids = [u.id for u in same_loc]
+
+    if req.requested_user_id not in ([current_user.id] + same_loc_ids):
+        flash('拒否する権限がありません。', 'danger')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    if req.status != 'Pending':
+        flash('拒否できるのは保留中のリクエストのみです。', 'warning')
+        return redirect(url_for('dashboard.dashboard_home'))
+
+    try:
+        req.status      = 'Rejected'
+        req.rejected_at = datetime.now(JST)
+        db.session.commit()
+        flash('リクエストを拒否しました。', 'success')
+        log_user_activity(
+            current_user.id, '希望材料リクエスト拒否',
+            f'ユーザーがリクエストID: {request_id} を拒否しました。',
+            request.remote_addr, request.user_agent.string, 'N/A'
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"希望材料リクエスト拒否エラー: {e}", exc_info=True)
+        flash('リクエストの拒否に失敗しました。', 'danger')
+
+    return redirect(url_for('dashboard.dashboard_home'))

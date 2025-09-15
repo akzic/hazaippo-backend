@@ -2,12 +2,13 @@
 
 from flask import Blueprint, render_template, request, flash, current_app, url_for, jsonify
 from flask_login import login_required, current_user
-from app.models import Material, WantedMaterial, User
+from app.models import Material, WantedMaterial, User, GroupMembership
 from app.forms import MaterialSearchForm, WantedMaterialSearchForm
 from app.blueprints.utils import log_user_activity
 from datetime import datetime, timedelta
 import pytz
 import logging
+from sqlalchemy import func, or_
 
 search_bp = Blueprint('search', __name__)
 JST = pytz.timezone('Asia/Tokyo')
@@ -17,102 +18,120 @@ logger = logging.getLogger(__name__)
 @search_bp.route('/materials', methods=['GET', 'POST'])
 @login_required
 def search_materials():
-    form = MaterialSearchForm()
-    results = []
-    messages = []
-    categories = []
-    has_results = False  # フラグの初期化
+    form        = MaterialSearchForm()
+    results     = []
+    messages    = []
+    categories  = []
+    has_results = False
 
-    if request.method == 'GET':
-        if current_user.prefecture:
-            form.m_prefecture.data = current_user.prefecture
+    # ------------- 画面初期表示時の都道府県プリセット ------------
+    if request.method == 'GET' and current_user.prefecture:
+        form.m_prefecture.data = current_user.prefecture
 
+    # ===========================================================
+    # ① フォームバリデーションが通った場合のみ検索を実行
+    # ===========================================================
     if form.validate_on_submit():
-        # ベースクエリに明示的な結合を追加
-        query = Material.query.join(User, Material.user_id == User.id)
+        # ---- ベースクエリ（Material ↔ User を結合）------------
+        query = (
+            Material.query
+            .join(User, Material.user_id == User.id)
+            .filter(Material.user_id != current_user.id)           # 自分の登録を除外
+        )
+        logger.debug(f"除外: user_id={current_user.id}")
 
-        # 自分自身が登録した材料を除外
-        query = query.filter(Material.user_id != current_user.id)
-        logger.debug(f"フィルタ: 除外 user_id={current_user.id}")
-
-        # フィルタリングロジック
+        # ---------- フォームの各フィールドで絞り込む ------------
         if form.material_type.data:
             query = query.filter(Material.type == form.material_type.data)
-            logger.debug(f"フィルタ: type={form.material_type.data}")
-
         if form.material_type.data == '木材' and form.wood_type.data:
             query = query.filter(Material.wood_type == form.wood_type.data)
-            logger.debug(f"フィルタ: wood_type={form.wood_type.data}")
-
         if form.material_type.data == 'ボード材' and form.board_material_type.data:
             query = query.filter(Material.board_material_type == form.board_material_type.data)
-            logger.debug(f"フィルタ: board_material_type={form.board_material_type.data}")
-
         if form.material_type.data == 'パネル材' and form.panel_type.data:
             query = query.filter(Material.panel_type == form.panel_type.data)
-            logger.debug(f"フィルタ: panel_type={form.panel_type.data}")
 
         if form.material_size_1.data:
             query = query.filter(Material.size_1 >= form.material_size_1.data)
-            logger.debug(f"フィルタ: size_1 >= {form.material_size_1.data}")
         if form.material_size_2.data:
             query = query.filter(Material.size_2 >= form.material_size_2.data)
-            logger.debug(f"フィルタ: size_2 >= {form.material_size_2.data}")
         if form.material_size_3.data:
             query = query.filter(Material.size_3 >= form.material_size_3.data)
-            logger.debug(f"フィルタ: size_3 >= {form.material_size_3.data}")
 
         if form.m_prefecture.data:
             query = query.filter(Material.m_prefecture == form.m_prefecture.data)
-            logger.debug(f"フィルタ: m_prefecture={form.m_prefecture.data}")
-
         if form.m_city.data:
             query = query.filter(Material.m_city.ilike(f"%{form.m_city.data}%"))
-            logger.debug(f"フィルタ: m_city ilike % {form.m_city.data} %")
 
-        query = query.filter(Material.matched == False, Material.deadline >= datetime.now())
-        logger.debug("フィルタ: matched=False and deadline >= current_time")
+        # 期限切れ／マッチ済みを除外
+        query = query.filter(Material.matched.is_(False),
+                             Material.deadline >= datetime.now())
 
-        # business_structure が 0 または 1 の場合、同じ company_name を持つユーザーの材料を除外
+        # ------------------ グループ制御 -----------------------
+        my_group_ids = [
+            m.group_id for m in GroupMembership.query
+                                   .filter_by(user_id=current_user.id)
+                                   .all()
+        ]
+        logger.debug(f"ユーザー所属グループ: {my_group_ids}")
+
+        if my_group_ids:      # 所属グループあり
+            query = query.filter(or_(Material.group_id.is_(None),
+                                     Material.group_id == 0,
+                                     Material.group_id.in_(my_group_ids)))
+        else:                 # 所属グループなし → group_id>0 をすべて除外
+            query = query.filter(or_(Material.group_id.is_(None),
+                                     Material.group_id == 0))
+
+        # ------------- 同一会社の材料を除外（法人のみ）----------
         if current_user.business_structure in [0, 1]:
             query = query.filter(User.company_name != current_user.company_name)
-            logger.debug(f"フィルタ: company_name != {current_user.company_name} (business_structure={current_user.business_structure})")
 
+        # ------------------------ 実行 --------------------------
         results = query.all()
+        has_results = bool(results)
 
-        logger.debug(f"実行されたクエリ: {str(query)}")
+        logger.debug(
+            f"最終SQL: {query.statement.compile(compile_kwargs={'literal_binds': True})}"
+        )
         logger.debug(f"検索結果数: {len(results)}")
 
-        if results:
-            has_results = True  # 結果がある場合はフラグをTrueに設定
-        else:
+        if not has_results:
             flash("検索結果が見つかりませんでした。", "info")
             messages.append("検索結果が見つかりませんでした。")
             categories.append("info")
 
+    # ===========================================================
+    # ② バリデーション NG の場合（POST でエラーになったとき）
+    # ===========================================================
     else:
         if request.method == 'POST':
             logger.debug("フォームのバリデーションに失敗しました。")
             logger.debug(f"フォームエラー: {form.errors}")
-            # フォームの各フィールドのエラーメッセージを収集
             for field, errors in form.errors.items():
                 for error in errors:
                     messages.append(error)
                     categories.append("error")
 
+    # ===========================================================
+    # ③ レスポンス（AJAX か通常ロードかで分ける）
+    # ===========================================================
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        # AJAXリクエストの場合、検索結果とメッセージを返す
         return jsonify({
-            'html': render_template('partials/search_results.html', results=results),
-            'messages': messages,
-            'categories': categories,
-            'has_results': has_results  # フラグを追加
+            'html'       : render_template('partials/search_results.html',
+                                           results=results),
+            'messages'   : messages,
+            'categories' : categories,
+            'has_results': has_results,
         })
-    else:
-        # 通常のリクエストの場合、フルページを返す
-        google_maps_api_key = current_app.config['GOOGLE_API_KEY']
-        return render_template('search.html', material_form=form, results=results, GOOGLE_API_KEY=google_maps_api_key)
 
+    # -------------- 通常フルリロード ---------------------------
+    google_maps_api_key = current_app.config['GOOGLE_API_KEY']
+    return render_template(
+        'search.html',
+        material_form = form,
+        results       = results,
+        GOOGLE_API_KEY= google_maps_api_key,
+    )
 
 @search_bp.route("/search_materials_results", methods=['POST'])
 @login_required

@@ -1,28 +1,54 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  web:
-    build: .
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=iriyo
+      - POSTGRES_PASSWORD=iriyo
+      - POSTGRES_DB=iriyo
     ports:
-      - "8000:8000"
+      - "5432:5432"
     volumes:
-      - .:/app
-    environment:
-      - FLASK_ENV=development
-    depends_on:
-      - redis
-
-  celery:
-    build: .
-    command: celery -A celery_worker.celery worker --loglevel=info
-    volumes:
-      - .:/app
-    environment:
-      - FLASK_ENV=development
-    depends_on:
-      - redis
+      - postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
+
+  web:
+    build: .
+    ports:
+      - "80:80"
+    volumes:
+      - .:/app               # アプリのソースコードをマウント
+      - ./app/static/.well-known:/app/app/static/.well-known:ro
+      - shared_uploads:/app/shared_uploads  # 画像などを共有するボリューム
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/config/hazaippo-firebase-adminsdk-fbsvc-571f320be7.json
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - redis
+      - postgres
+
+  celery:
+    build: .
+    command: celery -A celery_worker.celery worker --loglevel=info
+    volumes:
+      - .:/app               # アプリのソースコードをマウント
+      - ./app/static/.well-known:/app/app/static/.well-known:ro
+      - shared_uploads:/app/shared_uploads  # webと同じディレクトリを共有
+    environment:
+      - FLASK_ENV=development
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/config/hazaippo-firebase-adminsdk-fbsvc-571f320be7.json
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - redis
+      - postgres
+
+volumes:
+  postgres_data:
+  shared_uploads:

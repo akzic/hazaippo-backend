@@ -1,0 +1,31 @@
+# Gitリポジトリ関連のファイル・ディレクトリは除外
+.git/
+.gitignore
+.gitconfig
+.github/
+
+# Node.js の依存関係ディレクトリ（必要な場合は再インストールされるため）
+node_modules/
+
+# ローカルの環境ファイル（環境変数の設定ファイルなど）
+.env
+env.local
+
+# ログファイル
+*.log
+
+# キャッシュディレクトリ
+__pycache__/
+*.pyc
+
+# テストやドキュメントファイル（必要に応じて）
+tests/
+docs/
+
+# その他、開発用のツールや設定ファイル
+.DS_Store
+
+.ebextensions/
+.vscode/
+
+venv/

@@ -3,14 +3,14 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>希望端材編集 - はざいっぽ</title>
+    <title>希望資材編集 - はざいっぽ</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/edit_material.css') }}">
     <script src="{{ url_for('static', filename='js/edit_wanted_material.js') }}" defer></script>
 </head>
 <body>
     {% include 'header.html' %}
     <div class="content">
-        <h1>希望端材編集</h1>
+        <h1>希望資材編集</h1>
         <form method="POST" enctype="multipart/form-data" action="{{ url_for('materials.edit_wanted_material', material_id=wanted_material.id) }}">
             {{ form.hidden_tag() }}
             

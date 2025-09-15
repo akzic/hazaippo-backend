@@ -67,24 +67,32 @@ def send_email_safe(msg):
         return False
     return True
 
-def send_reset_email(user):
+def send_reset_email(user, for_mobile: bool = False):
     """
-    パスワードリセット用のメールを送信する関数。
-
-    Parameters:
-        user (User): パスワードリセットを行うユーザーオブジェクト。
-
-    Returns:
-        bool: 送信が成功した場合はTrue、失敗した場合はFalse。
+    パスワードリセットメールを送信する共通ユーティリティ
+    ------------------------------------------------------------------
+    今は HTTPS 未整備のため **必ず Web 版 URL** を送る。
+    Deep Link はコメントアウトしておき、将来 for_mobile=True で復活可能。
     """
     token = user.get_reset_token()
-    reset_url = url_for('auth.reset_token', token=token, _external=True)
-    msg = Message(
-        'パスワードリセットのリクエスト - はざいっぽ',
-        sender=os.environ.get('EMAIL_USER'),
-        recipients=[user.email]
-    )
-    msg.body = f'''{user.contact_name} さん,
+
+    # ────────────────────────────────────────────────────────────────
+    # 1) リセット URL 生成
+    # ────────────────────────────────────────────────────────────────
+    # if for_mobile:
+    #     # ===== DeepLink（カスタムスキーム）が必要になったらコメント解除 =====
+    #     reset_url = f"hazaippo://reset_password?token={token}"
+    # else:
+    #     reset_url = url_for('auth.reset_token', token=token, _external=True, _scheme="https")
+    # ----------------------------------------------------------------
+    # いまは常に Web 版 (HTTP) を使用
+    reset_url = url_for('auth.reset_token', token=token,
+                        _external=True, _scheme="http")   # ← 証明書取得後 https へ
+
+    # ────────────────────────────────────────────────────────────────
+    # 2) メール本文
+    # ────────────────────────────────────────────────────────────────
+    body = f'''{user.contact_name} さん
 
 アカウントのパスワードリセットのリクエストを受け取りました。
 
@@ -94,23 +102,32 @@ def send_reset_email(user):
 
 このリンクは30分間有効です。期限が過ぎると、このリンクは使用できなくなりますので、その場合は再度パスワードリセットのリクエストを行ってください。
 
-もしこのリクエストに覚えがない場合は、このメールを無視してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐに私たちにご連絡ください。
-
-よろしくお願いいたします。
-
-はざいっぽ チーム
+もしこのリクエストに覚えがない場合は、このメールを無視してください。
+疑わしいアクティビティがあった場合はすぐにご連絡ください。
 
 ---------------------------------
-
-ZAI株式会社
-システムチーム
+ZAI株式会社  システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
-
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 ---------------------------------
 '''
-    return send_email_safe(msg)
+
+    # ────────────────────────────────────────────────────────────────
+    # 3) 送信
+    # ────────────────────────────────────────────────────────────────
+    msg = Message(
+        subject='パスワードリセットのご案内 - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[user.email],
+        body=body,
+    )
+
+    try:
+        return send_email_safe(msg)
+    except Exception as e:
+        current_app.logger.error("Password-reset mail send failed: %s", e, exc_info=True)
+        return False
 
 def send_welcome_email(user_email):
     """
@@ -147,7 +164,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''

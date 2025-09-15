@@ -40,7 +40,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -48,12 +48,12 @@ ZAI株式会社
 
 def send_material_registration_email(user_email, material):
     msg = Message(
-        '余った端材の登録が完了しました - はざいっぽ',
+        '余った資材の登録が完了しました - はざいっぽ',
         sender=os.environ.get('EMAIL_USER'),
         recipients=[user_email]
     )
     msg.body = f'''\
-余った端材の登録をいただき、誠にありがとうございました。
+余った資材の登録をいただき、誠にありがとうございました。
 以下の情報にて登録が完了いたしましたことをご報告申し上げます。
 
 【登録情報】
@@ -64,7 +64,7 @@ def send_material_registration_email(user_email, material):
 数量：{material.quantity}個
 コメント：{material.note}
 
-ご登録いただいた端材は、すぐに表示され、必要としている方々にマッチングされます。
+ご登録いただいた資材は、すぐに表示され、必要としている方々にマッチングされます。
 
 何かご不明点やご質問がございましたら、どうぞお気軽にお問い合わせください。
 
@@ -78,7 +78,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -86,12 +86,12 @@ ZAI株式会社
 
 def send_wanted_material_registration_email(user_email, wanted_material):
     msg = Message(
-        '欲しい端材の登録が完了しました - はざいっぽ',
+        '欲しい資材の登録が完了しました - はざいっぽ',
         sender=os.environ.get('EMAIL_USER'),
         recipients=[user_email]
     )
     msg.body = f'''\
-欲しい端材の登録をいただき、誠にありがとうございました。
+欲しい資材の登録をいただき、誠にありがとうございました。
 以下の情報にて登録が完了しましたことをご報告申し上げます。
 
 【登録情報】
@@ -102,7 +102,7 @@ def send_wanted_material_registration_email(user_email, wanted_material):
 数量：{wanted_material.quantity}個
 コメント：{wanted_material.note}
 
-ご登録いただいた端材は、すぐに表示され、必要としている方々にマッチングされます。
+ご登録いただいた資材は、すぐに表示され、必要としている方々にマッチングされます。
 
 何かご不明点やご質問がございましたら、どうぞお気軽にお問い合わせください。
 
@@ -116,7 +116,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -129,9 +129,9 @@ def send_request_email(user_email):
         recipients=[user_email]
     )
     msg.body = '''\
-端材のリクエストを送信しました。
+資材のリクエストを送信しました。
 
-端材のリクエストが承諾されるまでお待ちください。
+資材のリクエストが承諾されるまでお待ちください。
 
 もしこのリクエストに覚えがない場合は、このメールを無視してください。あなたのアカウントのセキュリティを確保するため、疑わしいアクティビティがあった場合はすぐに私たちにご連絡ください。
 
@@ -145,7 +145,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -158,7 +158,7 @@ def send_new_request_received_email(user_email):
         recipients=[user_email]
     )
     msg.body = '''\
-端材のリクエストが届きました。
+資材のリクエストが届きました。
 
 「はざいっぽ」ログイン後のダッシュボード画面にて、内容を確認の上、リクエストを受けてください。
 
@@ -174,7 +174,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -250,7 +250,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -258,12 +258,12 @@ ZAI株式会社
 
 def send_accept_request_wanted_email(requester, wanted_material, accepted_user):
     msg = Message(
-        '欲しい端材がマッチしました - はざいっぽ',
+        '欲しい資材がマッチしました - はざいっぽ',
         sender=os.environ.get('EMAIL_USER'),
         recipients=[requester.email]
     )
     msg.body = f'''\
-欲しい端材がマッチしました。
+欲しい資材がマッチしました。
 
 下記情報にて連絡を取り合い、受け渡しを完了させてください。
 
@@ -294,7 +294,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -302,12 +302,12 @@ ZAI株式会社
 
 def send_accept_request_wanted_to_sender_email(requester, wanted_material, accepted_user):
     msg = Message(
-        'リクエストを送信した端材がマッチしました - はざいっぽ',
+        'リクエストを送信した資材がマッチしました - はざいっぽ',
         sender=os.environ.get('EMAIL_USER'),
         recipients=[accepted_user.email]
     )
     msg.body = f'''\
-リクエストを送信した端材がマッチしました。
+リクエストを送信した資材がマッチしました。
 
 下記情報にて連絡を取り合い、取引を完了させてください。
 
@@ -336,7 +336,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -365,7 +365,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -394,7 +394,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -429,7 +429,7 @@ def send_lecture_approval_email(requester_email, reservation, lecturer):
     システムチーム
     メール: support@zai-ltd.com
     電話: 052-990-3452
-    住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+    住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
     
     ---------------------------------
     '''
@@ -468,7 +468,7 @@ def send_lecturer_confirmation_email(lecturer_email, reservation, requester):
     システムチーム
     メール: support@zai-ltd.com
     電話: 052-990-3452
-    住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+    住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
     
     ---------------------------------
     '''
@@ -505,7 +505,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -540,7 +540,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -575,7 +575,7 @@ ZAI株式会社
 システムチーム
 メール: support@zai-ltd.com
 電話: 052-990-3452
-住所: 〒455-0068 愛知県名古屋市港区土古町1丁目51番10号
+住所: 〒466-0064 愛知県名古屋市昭和区鶴舞１丁目２−３２ STATION Ai 4階
 
 ---------------------------------
 '''
@@ -595,3 +595,112 @@ def send_new_message_email(to_email, company_name):
     except Exception as e:
         current_app.logger.error(f"メール送信エラー: {e}")
         return False
+
+# --- 資材リクエスト「拒否」通知 -------------------------------
+
+def send_reject_request_material_email(requester, material, rejector):
+    """
+    提供資材リクエストを『された側（＝リクエスト送信者）』へ送るメール
+    """
+    msg = Message(
+        'リクエストが拒否されました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[requester.email]
+    )
+    msg.body = f'''\
+残念ながら、以下の提供資材リクエストは拒否されました。
+
+【資材情報】
+材料名：{material.type}
+サイズ：{material.size_1}×{material.size_2}×{material.size_3}
+数量：{material.quantity}個
+場所：{material.location}
+
+【拒否した事業者】
+法人名（屋号）：{rejector.company_name}
+住所：{rejector.prefecture} {rejector.city} {rejector.address}
+担当者：{rejector.contact_name}（{rejector.email} / {rejector.contact_phone}）
+
+またのご利用をお待ちしております。
+
+はざいっぽ チーム
+'''
+    return send_email_safe(msg)
+
+
+def send_reject_notification_material_email(rejector, material):
+    """
+    提供資材リクエストを『した側（＝受信者 = 拒否したユーザ）』へ送る確認メール
+    """
+    msg = Message(
+        'リクエストを拒否しました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[rejector.email]
+    )
+    msg.body = f'''\
+以下の提供資材リクエストを拒否しました。
+
+材料名：{material.type}
+サイズ：{material.size_1}×{material.size_2}×{material.size_3}
+数量：{material.quantity}個
+場所：{material.location}
+
+拒否が完了しましたのでご確認ください。
+
+はざいっぽ チーム
+'''
+    return send_email_safe(msg)
+
+
+def send_reject_request_wanted_email(requester, wanted_material, rejector):
+    """
+    希望資材リクエストを『された側（＝リクエスト送信者）』へ送るメール
+    """
+    msg = Message(
+        'リクエストが拒否されました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[requester.email]
+    )
+    msg.body = f'''\
+残念ながら、以下の希望資材リクエストは拒否されました。
+
+【希望資材情報】
+材料名：{wanted_material.type}
+サイズ：{wanted_material.size_1}×{wanted_material.size_2}×{wanted_material.size_3}
+数量：{wanted_material.quantity}個
+場所：{wanted_material.location}
+
+【拒否した事業者】
+法人名（屋号）：{rejector.company_name}
+住所：{rejector.prefecture} {rejector.city} {rejector.address}
+担当者：{rejector.contact_name}（{rejector.email} / {rejector.contact_phone}）
+
+またのご利用をお待ちしております。
+
+はざいっぽ チーム
+'''
+    return send_email_safe(msg)
+
+
+def send_reject_notification_wanted_email(rejector, wanted_material):
+    """
+    希望資材リクエストを『した側（＝受信者 = 拒否したユーザ）』へ送る確認メール
+    """
+    msg = Message(
+        'リクエストを拒否しました - はざいっぽ',
+        sender=os.environ.get('EMAIL_USER'),
+        recipients=[rejector.email]
+    )
+    msg.body = f'''\
+以下の希望資材リクエストを拒否しました。
+
+材料名：{wanted_material.type}
+サイズ：{wanted_material.size_1}×{wanted_material.size_2}×{wanted_material.size_3}
+数量：{wanted_material.quantity}個
+場所：{wanted_material.location}
+
+拒否が完了しましたのでご確認ください。
+
+はざいっぽ チーム
+'''
+    return send_email_safe(msg)

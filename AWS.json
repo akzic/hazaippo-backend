@@ -1,0 +1,99 @@
+{
+    "AWSEBDockerrunVersion": 3,
+    "containerDefinitions": [
+      {
+        "name": "redis",
+        "image": "redis:alpine",
+        "essential": true,
+        "memory": 256,
+        "portMappings": [
+          {
+            "hostPort": 6379,
+            "containerPort": 6379
+          }
+        ]
+      },
+      {
+        "name": "web",
+        "image": "hazaippo-web:latest",
+        "essential": true,
+        "memory": 512,
+        "portMappings": [
+          {
+            "hostPort": 8000,
+            "containerPort": 8000
+          }
+        ],
+        "environment": [
+          {
+            "name": "FLASK_ENV",
+            "value": "development"
+          },
+          {
+            "name": "DATABASE_URL",
+            "value": "postgresql://iriyo:iriyo@iriyo-db-it.cbeig8saknbw.ap-northeast-1.rds.amazonaws.com:5432/iriyo"
+          },
+          {
+            "name": "CELERY_BROKER_URL",
+            "value": "redis://redis:6379/0"
+          },
+          {
+            "name": "CELERY_RESULT_BACKEND",
+            "value": "redis://redis:6379/0"
+          }
+        ],
+        "mountPoints": [
+          {
+            "sourceVolume": "shared_uploads",
+            "containerPath": "/app/shared_uploads"
+          }
+        ]
+      },
+      {
+        "name": "celery",
+        "image": "hazaippo-celery:latest",
+        "essential": true,
+        "memory": 512,
+        "command": [
+          "celery",
+          "-A",
+          "celery_worker.celery",
+          "worker",
+          "--loglevel=info"
+        ],
+        "environment": [
+          {
+            "name": "FLASK_ENV",
+            "value": "development"
+          },
+          {
+            "name": "DATABASE_URL",
+            "value": "postgresql://iriyo:iriyo@iriyo-db-it.cbeig8saknbw.ap-northeast-1.rds.amazonaws.com:5432/iriyo"
+          },
+          {
+            "name": "CELERY_BROKER_URL",
+            "value": "redis://redis:6379/0"
+          },
+          {
+            "name": "CELERY_RESULT_BACKEND",
+            "value": "redis://redis:6379/0"
+          }
+        ],
+        "mountPoints": [
+          {
+            "sourceVolume": "shared_uploads",
+            "containerPath": "/app/shared_uploads"
+          }
+        ]
+      }
+    ],
+    "volumes": [
+      {
+        "name": "shared_uploads",
+        "host": {
+          "sourcePath": "/var/app/current/shared_uploads"
+        }
+      }
+    ]
+  }
+  

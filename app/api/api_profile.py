@@ -1,59 +1,38 @@
 # app/api/api_profile.py
 
 from flask import Blueprint, request, jsonify, current_app
-from flask_login import login_required, current_user
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import User
-from app.forms import EditProfileForm  # フォームがAPIで使用される場合はフォームバリデーションを再検討
 from app.blueprints.utils import log_user_activity
-from werkzeug.exceptions import BadRequest
+from flask_login import login_user
 
 api_profile_bp = Blueprint('api_profile', __name__, url_prefix='/api/profile')
 
-def validate_edit_profile_data(data):
-    """
-    JSONデータのバリデーションを行います。
-    必要なフィールドが存在し、適切な型であることを確認します。
-    """
-    required_fields = ['company_name', 'prefecture', 'city', 'address',
-                       'without_approval', 'contact_name', 'contact_phone']
-    
-    # 個人以外のユーザーの場合に必要な追加フィールド
-    additional_fields = ['company_phone', 'industry', 'job_title']
-    
-    for field in required_fields:
-        if field not in data:
-            raise BadRequest(f"{field} が必要です。")
-    
-    # business_structure による追加フィールドのチェック
-    if current_user.business_structure != 2:
-        for field in additional_fields:
-            if field not in data:
-                raise BadRequest(f"{field} が必要です。")
+def get_current_user():
+    """JWTからユーザーIDを取得し、DBからユーザー情報をロードする"""
+    user_id = get_jwt_identity()
+    return User.query.get(user_id)
 
-    # 他のバリデーション（例: 電話番号の形式など）をここに追加可能
-
-@api_profile_bp.route('/<int:user_id>', methods=['GET'])
-@login_required
-def get_user_profile(user_id):
+@api_profile_bp.route("/<int:user_id>", methods=['GET'])
+@jwt_required()
+def user_profile(user_id):
     """
-    指定されたユーザーのプロフィールを取得します。
+    指定されたユーザーIDのプロフィール情報を JSON で返す。
+    ログにも表示します。
     """
+    current_user_obj = get_current_user()
     user = User.query.get_or_404(user_id)
-    
-    # アクティビティログの記録
     log_user_activity(
-        current_user.id,
-        'ユーザープロフィール取得',
-        f'ユーザーがユーザーID: {user_id} のプロフィールを取得しました。',
+        current_user_obj.id,
+        'ユーザープロフィール表示',
+        f'ユーザーがユーザーID: {user_id} のプロフィールを表示しました。',
         request.remote_addr,
         request.user_agent.string,
         'N/A'
     )
-    
-    user_data = {
+    profile_data = {
         'id': user.id,
-        'email': user.email,
         'company_name': user.company_name,
         'prefecture': user.prefecture,
         'city': user.city,
@@ -62,128 +41,74 @@ def get_user_profile(user_id):
         'contact_name': user.contact_name,
         'contact_phone': user.contact_phone,
         'line_id': user.line_id,
-        'business_structure': user.business_structure
+        'business_structure': user.business_structure,
+        'company_phone': user.company_phone if user.business_structure != 2 else None,
+        'industry': user.industry if user.business_structure != 2 else None,
+        'job_title': user.job_title if user.business_structure != 2 else None
     }
-    
-    # 個人以外のユーザーの場合のみ追加フィールドを含める
-    if user.business_structure != 2:
-        user_data.update({
-            'company_phone': user.company_phone,
-            'industry': user.industry,
-            'job_title': user.job_title
-        })
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'user': user_data
-        }
-    }), 200
+    return jsonify({'status': 'success', 'profile': profile_data}), 200
 
-@api_profile_bp.route('/', methods=['GET'])
-@login_required
-def get_current_user_profile():
+@api_profile_bp.route("", methods=['GET'])
+@jwt_required()
+def view_profile():
     """
-    現在のユーザーのプロフィールを取得します。
+    現在ログイン中のユーザーのプロフィール情報を JSON で返す。
     """
-    user = current_user
-    
-    user_data = {
-        'id': user.id,
-        'email': user.email,
-        'company_name': user.company_name,
-        'prefecture': user.prefecture,
-        'city': user.city,
-        'address': user.address,
-        'without_approval': user.without_approval,
-        'contact_name': user.contact_name,
-        'contact_phone': user.contact_phone,
-        'line_id': user.line_id,
-        'business_structure': user.business_structure
+    current_user_obj = get_current_user()
+    profile_data = {
+        'id': current_user_obj.id,
+        'company_name': current_user_obj.company_name,
+        'prefecture': current_user_obj.prefecture,
+        'city': current_user_obj.city,
+        'address': current_user_obj.address,
+        'without_approval': current_user_obj.without_approval,
+        'contact_name': current_user_obj.contact_name,
+        'contact_phone': current_user_obj.contact_phone,
+        'line_id': current_user_obj.line_id,
+        'business_structure': current_user_obj.business_structure,
+        'company_phone': current_user_obj.company_phone if current_user_obj.business_structure != 2 else None,
+        'industry': current_user_obj.industry if current_user_obj.business_structure != 2 else None,
+        'job_title': current_user_obj.job_title if current_user_obj.business_structure != 2 else None
     }
-    
-    # 個人以外のユーザーの場合のみ追加フィールドを含める
-    if user.business_structure != 2:
-        user_data.update({
-            'company_phone': user.company_phone,
-            'industry': user.industry,
-            'job_title': user.job_title
-        })
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'user': user_data
-        }
-    }), 200
+    return jsonify({'status': 'success', 'profile': profile_data}), 200
 
-@api_profile_bp.route('/edit', methods=['PUT'])
-@login_required
-def edit_profile_api():
+@api_profile_bp.route("/edit_profile", methods=['POST'])
+@jwt_required()
+def edit_profile():
     """
-    現在のユーザーのプロフィールを編集します。
+    現在ログイン中のユーザーのプロフィール情報を更新する API エンドポイント。
+    リクエストボディは JSON 形式で、更新したいフィールドを含むものとします。
     """
-    if not request.is_json:
-        return jsonify({'success': False, 'message': 'JSON形式のデータを送信してください。'}), 400
-    
+    current_user_obj = get_current_user()
     data = request.get_json()
-    
+    if not data:
+        return jsonify({'status': 'error', 'message': '更新するデータがありません。'}), 400
+
     try:
-        validate_edit_profile_data(data)
-    except BadRequest as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
-    
-    try:
-        # フィールドの更新
-        current_user.company_name = data['company_name']
-        current_user.prefecture = data['prefecture']
-        current_user.city = data['city']
-        current_user.address = data['address']
-        current_user.without_approval = data['without_approval']
-        current_user.contact_name = data['contact_name']
-        current_user.contact_phone = data['contact_phone']
-        current_user.line_id = data.get('line_id')  # オプショナル
-        
+        current_app.logger.debug(f"Edit profile request data: {data}")
+        current_user_obj.company_name = data.get('company_name', current_user_obj.company_name)
+        current_user_obj.prefecture = data.get('prefecture', current_user_obj.prefecture)
+        current_user_obj.city = data.get('city', current_user_obj.city)
+        current_user_obj.address = data.get('address', current_user_obj.address)
+        current_user_obj.without_approval = data.get('without_approval', current_user_obj.without_approval)
+        current_user_obj.contact_name = data.get('contact_name', current_user_obj.contact_name)
+        current_user_obj.contact_phone = data.get('contact_phone', current_user_obj.contact_phone)
+        # 空文字は None として扱う
+        current_user_obj.line_id = data.get('line_id') if data.get('line_id') else None
+
         # 個人以外の場合のみ追加フィールドを更新
-        if current_user.business_structure != 2:
-            current_user.company_phone = data['company_phone']
-            current_user.industry = data['industry']
-            current_user.job_title = data['job_title']
-        
+        if current_user_obj.business_structure != 2:
+            current_user_obj.company_phone = data.get('company_phone', current_user_obj.company_phone)
+            current_user_obj.industry = data.get('industry', current_user_obj.industry)
+            current_user_obj.job_title = data.get('job_title', current_user_obj.job_title)
+
         db.session.commit()
-        
+        db.session.refresh(current_user_obj)
         # セッションの再読み込み
-        db.session.refresh(current_user)
-        
-        # アクティビティログの記録
-        log_user_activity(
-            current_user.id,
-            'プロフィール編集',
-            'ユーザーがプロフィールを編集しました。',
-            request.remote_addr,
-            request.user_agent.string,
-            'N/A'
-        )
-        
-        return jsonify({
-            'success': True,
-            'message': 'プロフィールが更新されました。',
-            'data': {
-                'user': {
-                    'id': current_user.id,
-                    'email': current_user.email,
-                    'company_name': current_user.company_name,
-                    'prefecture': current_user.prefecture,
-                    'city': current_user.city,
-                    'address': current_user.address,
-                    'without_approval': current_user.without_approval,
-                    'contact_name': current_user.contact_name,
-                    'contact_phone': current_user.contact_phone,
-                    'line_id': current_user.line_id,
-                    'business_structure': current_user.business_structure
-                }
-            }
-        }), 200
+        login_user(current_user_obj, force=True)
+        return jsonify({'status': 'success', 'message': 'プロフィールが更新されました！'}), 200
+
     except Exception as e:
-        current_app.logger.error(f"プロフィール更新中にエラーが発生しました: {e}")
-        return jsonify({'success': False, 'message': 'プロフィールの更新中にエラーが発生しました。'}), 500
+        db.session.rollback()
+        current_app.logger.error(f"Error updating profile: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'プロフィールの更新に失敗しました。'}), 500

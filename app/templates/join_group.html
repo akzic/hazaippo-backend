@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>グループ参加 / 退会</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+    <h1 class="mb-4">グループ参加 / 退会</h1>
+
+    <!-- ========== 検索フォーム ========== -->
+    <div class="card mb-4">
+        <div class="card-header">グループ検索（法人名 or グループ名 完全一致）</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('groups.join') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2">
+                    <div class="col-md">
+                        <input type="text"
+                               name="company_query"
+                               value="{{ company_query }}"
+                               class="form-control"
+                               placeholder="法人名 / 屋号名 を完全一致で入力" required>
+                    </div>
+                    <div class="col-md">
+                        <input type="text"
+                               name="group_query"
+                               value="{{ group_query }}"
+                               class="form-control"
+                               placeholder="グループ名を完全一致で入力" required>
+                    </div>
+                    <div class="col-md-auto">
+                        <button class="btn btn-primary w-100" type="submit">検索</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if query and not results %}
+        <div class="alert alert-warning">該当するグループは見つかりませんでした。</div>
+    {% endif %}
+
+    {% if results %}
+    <div class="card mb-4">
+        <div class="card-header">検索結果</div>
+        <div class="table-responsive">
+            <table class="table table-striped align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>グループ名</th>
+                        <th>法人名 / 屋号</th>
+                        <th>説明</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for g, owner in results %}
+                    <tr>
+                        <td>{{ g.id }}</td>
+                        <td>{{ g.name }}</td>
+                        <td>{{ owner.company_name }}</td>
+                        <td>{{ g.description }}</td>
+                        <td>
+                            {% if g.id in joined_ids %}
+                                <span class="badge bg-secondary">参加中</span>
+                            {% else %}
+                                <form method="POST"
+                                      action="{{ url_for('groups.join_apply', group_id=g.id) }}"
+                                      onsubmit="return confirm('このグループに参加しますか？');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-success">参加</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ========== 所属グループ一覧 & 退会 ========== -->
+    <div class="card mt-4">
+        <div class="card-header">所属しているグループ</div>
+        <div class="table-responsive">
+            <table class="table table-striped align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>グループ名</th>
+                        <th>役割</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for g, mem in my_groups %}
+                    <tr>
+                        <td>{{ g.name }}</td>
+                        <td>{{ mem.role.value }}</td>
+                        <td>
+                            {% if g.owner_user_id == current_user.id %}
+                                <span class="text-muted">オーナーは退会不可</span>
+                            {% else %}
+                                <form method="POST"
+                                      action="{{ url_for('groups.leave', group_id=g.id) }}"
+                                      onsubmit="return confirm('このグループを退会しますか？');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-danger">退会</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="3" class="text-center">まだ所属していません</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <a href="{{ url_for('dashboard.dashboard_home') }}"
+           class="btn btn-secondary">メインメニューへ戻る</a>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

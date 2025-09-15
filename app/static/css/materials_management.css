@@ -1,0 +1,438 @@
+/* ========== リセット・基本設定 ========== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    color: #333;
+    line-height: 1.6;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  
+  /* ========== メインコンテナ ========== */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+  
+  /* ========== ヘッダー ========== */
+  .header {
+    background: linear-gradient(135deg, #d66a35 0%, #e67e22 100%);
+    color: white;
+    padding: 30px 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .header::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    animation: shimmer 3s ease-in-out infinite;
+  }
+  
+  @keyframes shimmer {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    50% {
+      transform: rotate(180deg);
+    }
+  }
+  
+  .header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    position: relative;
+    z-index: 1;
+  }
+  
+  /* ========== テーブルコンテナ ========== */
+  .table-container {
+    padding: 40px;
+    overflow-x: auto;
+  }
+  
+  /* ========== テーブルスタイル ========== */
+  #materials-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+  }
+  
+  #materials-table thead {
+    background: linear-gradient(135deg, #4db995 0%, #3a9d7a 100%);
+    color: white;
+  }
+  
+  #materials-table thead th {
+    padding: 20px 16px;
+    font-weight: 600;
+    text-align: left;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-bottom: 3px solid #2c8a6b;
+  }
+  
+  #materials-table tbody tr {
+    transition: all 0.3s ease;
+    border-bottom: 1px solid #e8ecef;
+  }
+  
+  #materials-table tbody tr:hover {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  #materials-table tbody tr:last-child {
+    border-bottom: none;
+  }
+  
+  #materials-table tbody td {
+    padding: 18px 16px;
+    font-size: 0.9rem;
+    vertical-align: middle;
+  }
+  
+  /* ========== 編集モード ========== */
+  #materials-table tbody tr.editable {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 2px solid #d66a35;
+    box-shadow: 0 6px 20px rgba(214, 106, 53, 0.2);
+  }
+  
+  #materials-table tbody tr.editable td {
+    padding: 12px 16px;
+  }
+  
+  /* ========== フォーム要素 ========== */
+  select,
+  input[type="text"],
+  input[type="number"] {
+    width: 100%;
+    padding: 8px 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+    background: white;
+  }
+  
+  select:focus,
+  input[type="text"]:focus,
+  input[type="number"]:focus {
+    outline: none;
+    border-color: #4db995;
+    box-shadow: 0 0 0 3px rgba(77, 185, 149, 0.1);
+    transform: translateY(-1px);
+  }
+  
+  select {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 8px center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+    padding-right: 32px;
+  }
+  
+  /* ========== ボタンスタイル ========== */
+  .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+  }
+  
+  .btn:hover::before {
+    width: 300px;
+    height: 300px;
+  }
+  
+  .btn-primary {
+    background: linear-gradient(135deg, #4db995 0%, #3a9d7a 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(77, 185, 149, 0.3);
+  }
+  
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #3a9d7a 0%, #2c8a6b 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(77, 185, 149, 0.4);
+  }
+  
+  .btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+  }
+  
+  .btn-success:hover {
+    background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+  }
+  
+  .btn-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+  }
+  
+  .btn-danger:hover {
+    background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+  }
+  
+  .btn-secondary {
+    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+  }
+  
+  .btn-secondary:hover {
+    background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4);
+  }
+  
+  /* ========== アクションボタンコンテナ ========== */
+  .action-buttons {
+    white-space: nowrap;
+  }
+  
+  .delete-form {
+    display: inline-block;
+  }
+  
+  /* ========== 空データメッセージ ========== */
+  #materials-table tbody tr td[colspan] {
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 1.1rem;
+    color: #6c757d;
+    font-style: italic;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  }
+  
+  /* ========== サイズ入力フィールド ========== */
+  .size input {
+    width: 30% !important;
+    display: inline-block;
+    margin: 0 2px;
+  }
+  
+  /* ========== 場所入力フィールド ========== */
+  .location .edit-city,
+  .location .edit-addr {
+    width: 45% !important;
+    margin: 2px 1%;
+  }
+  
+  .location select {
+    margin-bottom: 8px;
+  }
+  
+  /* ========== レスポンシブデザイン ========== */
+  @media (max-width: 1200px) {
+    .container {
+      margin: 10px;
+      border-radius: 12px;
+    }
+  
+    .table-container {
+      padding: 20px;
+    }
+  
+    .header {
+      padding: 20px;
+    }
+  
+    .header h1 {
+      font-size: 2rem;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    body {
+      padding: 10px;
+    }
+  
+    .header h1 {
+      font-size: 1.5rem;
+    }
+  
+    #materials-table {
+      font-size: 0.8rem;
+    }
+  
+    #materials-table thead th,
+    #materials-table tbody td {
+      padding: 12px 8px;
+    }
+  
+    .btn {
+      padding: 8px 12px;
+      font-size: 0.75rem;
+      margin: 2px;
+    }
+  
+    select,
+    input[type="text"],
+    input[type="number"] {
+      padding: 6px 8px;
+      font-size: 0.8rem;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .table-container {
+      padding: 10px;
+      overflow-x: scroll;
+    }
+  
+    #materials-table {
+      min-width: 800px;
+    }
+  
+    .header {
+      padding: 15px;
+    }
+  
+    .header h1 {
+      font-size: 1.3rem;
+    }
+  }
+  
+  /* ========== スクロールバーカスタマイズ ========== */
+  .table-container::-webkit-scrollbar {
+    height: 8px;
+  }
+  
+  .table-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+  
+  .table-container::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #d66a35 0%, #4db995 100%);
+    border-radius: 4px;
+  }
+  
+  .table-container::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #c85a25 0%, #3a9d7a 100%);
+  }
+  
+  /* ========== アニメーション ========== */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .container {
+    animation: fadeIn 0.6s ease-out;
+  }
+  
+  /* ========== フォーカス時のアクセシビリティ ========== */
+  .btn:focus {
+    outline: 3px solid rgba(77, 185, 149, 0.5);
+    outline-offset: 2px;
+  }
+  
+  select:focus,
+  input:focus {
+    outline: none;
+  }
+  
+  /* ========== 印刷スタイル ========== */
+  @media print {
+    body {
+      background: white;
+      padding: 0;
+    }
+  
+    .container {
+      box-shadow: none;
+      border-radius: 0;
+    }
+  
+    .header {
+      background: #d66a35 !important;
+      -webkit-print-color-adjust: exact;
+    }
+  
+    #materials-table thead {
+      background: #4db995 !important;
+      -webkit-print-color-adjust: exact;
+    }
+  
+    .btn {
+      display: none;
+    }
+    select,
+    .edit-type,
+    .edit-cat,
+    .edit-pref {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+
+    /* 任意で 1 個だけ矢印アイコンを付与（SVG）*/
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23333' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6em center;
+    background-size: 0.7em;
+    padding-right: 2em;  /* 矢印分の余白 */
+    }
+  }
+  

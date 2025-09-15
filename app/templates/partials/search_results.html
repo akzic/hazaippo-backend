@@ -4,7 +4,7 @@
         {% for result in results %}
             <li class="search-result-item">
                 <div class="result-info">
-                    <p><strong>端材の種類:</strong> {{ result.type }}</p>
+                    <p><strong>資材の種類:</strong> {{ result.type }}</p>
                     
                     {% if result.type == '木材' and result.wood_type %}
                         <p><strong>木材の種類:</strong> {{ result.wood_type }}</p>
@@ -26,7 +26,8 @@
                     
                     <p><strong>受け取り住所:</strong> {{ result.m_prefecture }} {{ result.m_city }} {{ result.m_address }}</p>
                     
-                    <p><strong>締切日:</strong> {{ result.deadline.strftime('%Y-%m-%d %H:%M') }}</p>
+                    <p>締切日: {{ result.deadline.strftime('%Y-%m-%d') }}{% if result.exclude_weekends %}（土日を除く）{% endif %}</p>
+
                 </div>
                 
                 <div class="result-actions">

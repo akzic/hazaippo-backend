@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.zai.hazaippo",
+      "sha256_cert_fingerprints": [
+        "33:1E:34:E5:CA:31:44:85:60:CE:8A:63:BD:30:47:48:51:B7:BF:3B:9F:83:0E:AA:F2:34:65:87:DD:8D:3F:06"
+      ]
+    }
+  }
+]

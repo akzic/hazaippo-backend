@@ -300,7 +300,7 @@ document.addEventListener("DOMContentLoaded", function() {
                         <button class="edit-button btn btn-primary" onclick="editRow(this)">編集</button>
                         <form action="${deleteUrl}" method="POST" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="${csrfTokenValue}">
-                            <button type="submit" class="btn btn-danger" onclick="return confirm('対象の端材を削除してもよろしいですか。');">削除</button>
+                            <button type="submit" class="btn btn-danger" onclick="return confirm('対象の資材を削除してもよろしいですか。');">削除</button>
                         </form>
                     `;
                 } else if (tabId === 'Completed') {
@@ -377,7 +377,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // ページ読み込み時に締切日が過ぎている端材をチェック
+    // ページ読み込み時に締切日が過ぎている資材をチェック
     function checkDeadlines() {
         const rows = document.querySelectorAll('#Unmatched tbody tr, #MatchedUncompleted tbody tr, #Completed tbody tr');
         let hasPastDeadline = false;
@@ -415,9 +415,9 @@ document.addEventListener("DOMContentLoaded", function() {
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             const isHistoryDelete = this.classList.contains('delete-history-form'); // 履歴削除かどうかを判定
 
-            let confirmMessage = '対象の端材を削除してもよろしいですか。';
+            let confirmMessage = '対象の資材を削除してもよろしいですか。';
             if (isHistoryDelete) {
-                confirmMessage = '対象の端材の履歴を削除してもよろしいですか。';
+                confirmMessage = '対象の資材の履歴を削除してもよろしいですか。';
             }
 
             if (!confirm(confirmMessage)) {
