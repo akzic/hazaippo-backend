@@ -22,7 +22,7 @@
             <select id="group-filter"
                     data-base-url="{{ url_for('materials.materials_management') }}"
                     style="margin-left:1rem; padding:4px 8px;">
-                <option value="">自分の端材</option>
+                <option value="">自社の資材</option>
                 {% for g in groups %}
                 <option value="{{ g.id }}"
                         {% if g.id == selected_group_id %}selected{% endif %}>

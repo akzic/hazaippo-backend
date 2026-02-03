@@ -1,6 +1,6 @@
 # app/api/api_materials.py
 
-from flask import Flask, Blueprint, request, jsonify, current_app
+from flask import Flask, Blueprint, request, jsonify, current_app, url_for
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import Material, WantedMaterial, User, Site, Request, UserGroup, GroupMembership
@@ -11,11 +11,14 @@ import re
 import logging
 from werkzeug.utils import secure_filename
 from uuid import uuid4
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from app.image_processing import process_image_ai
 from app.blueprints.utils import log_user_activity
 from app.utils.s3_uploader import upload_file_to_s3, build_s3_url, convert_heic_to_jpeg
+import requests
+from math import radians, cos, sin, asin, sqrt
 
 logger = logging.getLogger(__name__)
 JST = pytz.timezone('Asia/Tokyo')
@@ -76,6 +79,63 @@ def get_current_user():
     """JWT からユーザーIDを取得し、DBからユーザー情報をロードする"""
     user_id = get_jwt_identity()
     return User.query.get(user_id)
+
+# 住所→緯度経度
+def geocode_address(address: str) -> tuple[float, float] | None:
+    """
+    Google Geocoding APIで住所を座標化。
+    .env / 設定: GOOGLE_API_KEY を使用
+    """
+    try:
+        key = (
+            current_app.config.get("GOOGLE_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY", "")
+        )
+        if not address.strip() or not key:
+            return None
+        url = "https://maps.googleapis.com/maps/api/geocode/json"
+        params = {"address": address, "key": key, "language": "ja"}
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code != 200:
+            current_app.logger.warning(f"Geocode HTTP {r.status_code}: {r.text[:200]}")
+            return None
+        data = r.json()
+        if not data.get("results"):
+            return None
+        loc = data["results"][0]["geometry"]["location"]
+        return float(loc["lat"]), float(loc["lng"])
+    except Exception as e:
+        current_app.logger.error(f"geocode_address error: {e}")
+        return None
+
+# ─────────────────────────────
+# Haversine: 2点間の距離(km)
+# ─────────────────────────────
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371.0  # 地球半径 km
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a))
+    return R * c
+
+def normalize_tags(tags_value):
+    """
+    Flutter から配列 or カンマ区切り文字列で来ても、
+    DB 側では 1 本の文字列として保存するためのヘルパー。
+    """
+    if tags_value is None:
+        return None
+    # 配列で来た場合: ["木材", "端材", "無料"] → "木材,端材,無料"
+    if isinstance(tags_value, list):
+        cleaned = [str(t).strip() for t in tags_value if str(t).strip()]
+        return ",".join(cleaned) if cleaned else None
+    # 文字列で来た場合: "木材, 端材 , 無料"
+    if isinstance(tags_value, str):
+        t = tags_value.strip()
+        return t or None
+    # それ以外の型は無視
+    return None
 
 # ─────────────────────────────
 # Material Registration (API)
@@ -177,6 +237,15 @@ def register_material():
         except ValueError:
             errors.append(f"{s} must be numeric.")
 
+    # サイズが数値でない場合もバリデーションエラーとして返す
+    if errors:
+        current_app.logger.error("Validation errors (sizes): %s", errors)
+        return jsonify({
+            "status": "error",
+            "message": "Validation errors",
+            "errors": errors
+        }), 422
+
     # ---------------------------------------------------
     # 4. AI 処理は /analyze_material に移譲したため完全にスキップ
     # ---------------------------------------------------
@@ -241,6 +310,7 @@ def register_material():
         m_city = data.get("m_city", "").strip()
         m_address = data.get("m_address", "").strip()
         location = f"{m_prefecture} {m_city} {m_address}"
+        storage_place = (data.get("storage_place") or "").strip()
 
         # AI 位置情報（ai_location）があればそちらを優先したい場合はここで処理
         # 今回の例ではフォーム優先にしているため省略。
@@ -248,6 +318,53 @@ def register_material():
     except Exception as e:
         current_app.logger.error("Error processing location data: %s", e)
         return jsonify({"status": "error", "message": "Error processing location data."}), 500
+
+    # 7.5 住所→座標（lat/lng）を自動付与
+    # 👉 Flutter から送られてくる lat/lng には頼らず、
+    #    フォームに入力された住所からのみジオコーディングする
+    lat = None
+    lng = None
+    try:
+        geo = geocode_address(location)
+        if geo:
+            lat, lng = geo
+            current_app.logger.debug(
+                f"Geocoded lat/lng from address: {lat}, {lng}"
+            )
+        else:
+            current_app.logger.warning(
+                f"Geocoding failed or empty address. location='{location}'"
+            )
+    except Exception as e:
+        current_app.logger.error(
+            f"Geocoding / lat-lng resolving exception: {e}"
+        )
+
+    # ③ どちらでも取れなかった場合はフォームバリデーションエラーとして扱う
+    #    → フロント側で住所フィールドに「詳細な住所に修正してください」と表示する想定
+    if lat is None or lng is None:
+        errors.append("location: 詳細な住所（番地・建物名まで）を入力してください。")
+        current_app.logger.warning(
+            "Lat/Lng could not be resolved from address: %s", location
+        )
+        return jsonify({
+            "status": "error",
+            "message": "Validation errors",
+            "errors": errors
+        }), 422
+
+    # ---------------------------------------------------
+    # 7.8 タイトル・タグの取得
+    # ---------------------------------------------------
+    title_val = (data.get("title") or "").strip()
+    tags_val  = normalize_tags(data.get("tags"))
+    # 収納場所（例: 1st Floor）を受け取る
+    # Flutter 側からは storagePlace で送っても OK にしておく
+    storage_place_val = (
+        data.get("storage_place")
+        or data.get("storagePlace")
+        or ""
+    ).strip()
 
     # ---------------------------------------------------
     # 8. Material オブジェクトの作成
@@ -263,6 +380,8 @@ def register_material():
             m_prefecture = m_prefecture,
             m_city = m_city,
             m_address = m_address,
+            latitude = lat,
+            longitude = lng,
             quantity = quantity_val,
             deadline = deadline_val,
             exclude_weekends = (
@@ -272,6 +391,9 @@ def register_material():
             ),
             image = image_key,
             note = data.get("note"),
+            title = title_val,
+            tags = tags_val,
+            storage_place = storage_place_val,
             wood_type = data.get("wood_type") \
                 if material_type_val == "木材" else None,
             board_material_type = data.get("board_material_type") \
@@ -620,73 +742,144 @@ def detail_wanted(wanted_material_id):
         'total_matched_count': matched_count
     }), 200
 
-# ─────────────────────────────
-# Material List (API)
-# ─────────────────────────────
 @api_materials_bp.route('/material_list', methods=['GET'])
 @jwt_required()
 def material_list():
     current_user_obj = get_current_user()
     business_structure = current_user_obj.business_structure
+
     try:
         if business_structure in [0, 1]:
-            unmatched_materials = Material.query.options(joinedload('owner')).join(User, Material.user_id == User.id).filter(
-                Material.matched == False,
-                Material.completed == False,
-                Material.deleted == False,
-                User.company_name == current_user_obj.company_name,
-                User.prefecture == current_user_obj.prefecture,
-                User.city == current_user_obj.city,
-                User.address == current_user_obj.address
-            ).all()
-            matched_uncompleted_materials = Material.query.options(joinedload('owner')).join(Request, Material.id == Request.material_id).join(User, Material.user_id == User.id).filter(
-                Material.matched == True,
-                Material.completed == False,
-                Material.deleted == False,
-                User.company_name == current_user_obj.company_name,
-                User.prefecture == current_user_obj.prefecture,
-                User.city == current_user_obj.city,
-                User.address == current_user_obj.address
-            ).all()
-            completed_materials = Material.query.options(joinedload('owner')).join(User, Material.user_id == User.id).filter(
-                Material.completed == True,
-                Material.deleted == False,
-                User.company_name == current_user_obj.company_name,
-                User.prefecture == current_user_obj.prefecture,
-                User.city == current_user_obj.city,
-                User.address == current_user_obj.address
-            ).all()
+            # 法人：同じ会社 & 同じ住所の資材を対象
+            unmatched_materials = (
+                Material.query.options(
+                    joinedload(Material.owner),
+                    joinedload(Material.group),
+                )
+                .join(User, Material.user_id == User.id)
+                .filter(
+                    Material.matched == False,
+                    Material.completed == False,
+                    Material.deleted == False,
+                    Material.pre_completed == False,   # ✅ 追加
+                    User.company_name == current_user_obj.company_name,
+                    User.prefecture == current_user_obj.prefecture,
+                    User.city == current_user_obj.city,
+                    User.address == current_user_obj.address,
+                )
+                .all()
+            )
+
+            matched_uncompleted_materials = (
+                Material.query.options(
+                    joinedload(Material.owner),
+                    joinedload(Material.group),
+                )
+                .join(Request, Material.id == Request.material_id)
+                .join(User, Material.user_id == User.id)
+                .filter(
+                    Material.matched == True,
+                    Material.completed == False,
+                    Material.deleted == False,
+                    Material.pre_completed == False,   # ✅ 追加
+                    User.company_name == current_user_obj.company_name,
+                    User.prefecture == current_user_obj.prefecture,
+                    User.city == current_user_obj.city,
+                    User.address == current_user_obj.address,
+                )
+                .all()
+            )
+
+            completed_materials = (
+                Material.query.options(
+                    joinedload(Material.owner),
+                    joinedload(Material.group),
+                )
+                .join(User, Material.user_id == User.id)
+                .filter(
+                    Material.completed == True,
+                    Material.deleted == False,
+                    Material.pre_completed == False,   # ✅ 追加
+                    User.company_name == current_user_obj.company_name,
+                    User.prefecture == current_user_obj.prefecture,
+                    User.city == current_user_obj.city,
+                    User.address == current_user_obj.address,
+                )
+                .all()
+            )
+
         elif business_structure == 2:
-            unmatched_materials = Material.query.options(joinedload('owner')).filter_by(
-                user_id=current_user_obj.id,
-                matched=False,
-                completed=False,
-                deleted=False
-            ).all()
-            matched_uncompleted_materials = Material.query.options(joinedload('owner')).join(Request, Material.id == Request.material_id).filter(
-                Material.matched == True,
-                Material.completed == False,
-                Material.deleted == False,
-                Material.user_id == current_user_obj.id
-            ).all()
-            completed_materials = Material.query.options(joinedload('owner')).filter_by(
-                user_id=current_user_obj.id,
-                completed=True,
-                deleted=False
-            ).all()
+            # 個人：自分の資材だけ
+            unmatched_materials = (
+                Material.query.options(
+                    joinedload(Material.owner),
+                    joinedload(Material.group),
+                )
+                .filter_by(
+                    user_id=current_user_obj.id,
+                    matched=False,
+                    completed=False,
+                    deleted=False,
+                    pre_completed=False,  # ✅ 追加
+                )
+                .all()
+            )
+
+            matched_uncompleted_materials = (
+                Material.query.options(
+                    joinedload(Material.owner),
+                    joinedload(Material.group),
+                )
+                .join(Request, Material.id == Request.material_id)
+                .filter(
+                    Material.matched == True,
+                    Material.completed == False,
+                    Material.deleted == False,
+                    Material.pre_completed == False,  # ✅ 追加
+                    Material.user_id == current_user_obj.id,
+                )
+                .all()
+            )
+
+            completed_materials = (
+                Material.query.options(
+                    joinedload(Material.owner),
+                    joinedload(Material.group),
+                )
+                .filter_by(
+                    user_id=current_user_obj.id,
+                    completed=True,
+                    deleted=False,
+                    pre_completed=False,  # ✅ 追加
+                )
+                .all()
+            )
+
         else:
             unmatched_materials = []
             matched_uncompleted_materials = []
             completed_materials = []
 
+        # ✅ Flutter GiveMaterial に必要な形へ統一（user / image_url / group_name / lat / lng）
         response_data = {
-            'unmatched_materials': [m.to_dict() for m in unmatched_materials],
-            'matched_uncompleted_materials': [m.to_dict() for m in matched_uncompleted_materials],
-            'completed_materials': [m.to_dict() for m in completed_materials]
+            'unmatched_materials': [
+                material_to_give_json(m, include_user=True)
+                for m in unmatched_materials
+            ],
+            'matched_uncompleted_materials': [
+                material_to_give_json(m, include_user=True)
+                for m in matched_uncompleted_materials
+            ],
+            'completed_materials': [
+                material_to_give_json(m, include_user=True)
+                for m in completed_materials
+            ],
         }
+
         return jsonify({'status': 'success', 'data': response_data}), 200
+
     except Exception as e:
-        current_app.logger.error(f"Error fetching material list: {e}")
+        current_app.logger.error(f"Error fetching material list: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'Error fetching material list.'}), 500
 
 # ─────────────────────────────
@@ -724,6 +917,9 @@ def edit_material_ajax(material_id):
         m_address = data.get('m_address', '').strip()
         deadline_str = data.get('deadline', '').strip()
         note = data.get('note', '').strip()
+        title = data.get('title', '').strip()
+        tags_raw = data.get('tags')
+        tags = normalize_tags(tags_raw)
 
         try:
             deadline = datetime.strptime(deadline_str, '%Y-%m-%dT%H:%M')
@@ -771,6 +967,23 @@ def edit_material_ajax(material_id):
         material.location = f"{m_prefecture}{m_city}{m_address}"
         material.deadline = deadline
         material.note = note
+        material.title = title
+        material.tags = tags
+
+        # 住所が変わった場合は、lat/lng も更新
+        try:
+            new_location = material.location.strip()
+            geo = geocode_address(new_location) if new_location else None
+            if geo:
+                material.latitude, material.longitude = geo
+                current_app.logger.debug(
+                    f"[edit] Geocoded lat/lng: {material.latitude}, {material.longitude}"
+                )
+            else:
+                # 失敗時は既存値を維持（NULL のままでも可）
+                current_app.logger.info("[edit] Geocoding failed. Keep existing lat/lng.")
+        except Exception as e:
+            current_app.logger.error(f"[edit] Geocoding exception: {e}")
 
         db.session.commit()
         return jsonify({'status': 'success', 'message': 'Material updated successfully.', 'material': material.to_dict()}), 200
@@ -1060,3 +1273,369 @@ def bulk_register_wanted():
         db.session.rollback()
         current_app.logger.error(f"Bulk wanted registration error: {e}")
         return jsonify({'status': 'error', 'message': 'Error during bulk registration.'}), 500
+
+@api_materials_bp.route('/nearby', methods=['POST'])
+def nearby_materials():
+    """
+    ユーザーの現在地(lat/lng)から指定距離以内の資材を検索して返す。
+    DB に保存されている lat/lng を利用。
+    認証不要。
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        base_lat = float(payload.get("lat"))
+        base_lng = float(payload.get("lng"))
+        radius = float(payload.get("radius", 10.0))  # デフォルト10km
+    except Exception:
+        return jsonify({"status": "error", "message": "lat/lng は数値で送ってください"}), 400
+
+    try:
+        # ✅ 未削除 & pre_completed除外 & 緯度経度ありの資材を取得
+        mats = (
+            Material.query
+            .options(joinedload(Material.owner), joinedload(Material.group))
+            .filter(
+                Material.deleted == False,
+                Material.pre_completed == False,   # ✅ 追加（pre_completed を返さない）
+                Material.latitude.isnot(None),
+                Material.longitude.isnot(None)
+            )
+            .all()
+        )
+
+        results = []
+        for m in mats:
+            lat, lng = m.latitude, m.longitude
+            if lat is None or lng is None:
+                continue
+
+            dist_km = haversine(base_lat, base_lng, lat, lng)
+
+            if dist_km <= radius:
+                # ✅ 共通整形で返す（pre_completed も含まれる）
+                material_dict = material_to_give_json(m, include_user=True)
+
+                results.append({
+                    "material": material_dict,
+                    "distance_km": round(dist_km, 2),
+                })
+
+        results.sort(key=lambda x: x["distance_km"])
+
+        return jsonify({
+            "status": "success",
+            "count": len(results),
+            "materials": results,
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"/nearby error: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": "サーバー内部でエラーが発生しました"}), 500
+
+# ---------------------------------------------------
+# 特定ユーザーの資材一覧取得
+# ---------------------------------------------------
+@api_materials_bp.route('/user/<int:user_id>', methods=['GET'])
+def materials_by_user(user_id):
+    """
+    MainExploreMaterialUserScreen 用
+    指定ユーザーの資材を返す。
+    - deleted は除外
+    - matched/completed は含める（フロントのフィルタで使う）
+    - user 情報を埋め込む
+    - image_url/lat/lng/group_name を補完
+    ※ 認証不要（未ログインでも利用可）
+    """
+    try:
+        # 将来権限制御する場合は、ここで「任意JWT」を見るようにする想定
+        # 例）verify_jwt_in_request(optional=True) など
+        # 現状は使わないのでコメントアウト
+        # _current = get_current_user()
+
+        mats = (
+            Material.query
+            .options(
+                joinedload(Material.owner),
+                joinedload(Material.group),
+            )
+            .filter(
+                Material.user_id == user_id,
+                Material.deleted == False,
+            )
+            .order_by(Material.created_at.desc())
+            .all()
+        )
+
+        materials_json = [
+            material_to_give_json(m, include_user=True)
+            for m in mats
+        ]
+
+        return jsonify({
+            "status": "success",
+            "count": len(materials_json),
+            "materials": materials_json,
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(
+            f"Error fetching materials by user: {e}",
+            exc_info=True
+        )
+        return jsonify({
+            "status": "error",
+            "message": "Error fetching user materials."
+        }), 500
+
+# ─────────────────────────────
+# Storage Place List (API)
+# ─────────────────────────────
+@api_materials_bp.route('/storage_place', methods=['GET'])
+@jwt_required()
+def get_storage_place_list():
+    """
+    自分が過去に登録した資材の storage_place を一覧で返す。
+    - deleted は除外
+    - 空文字は除外
+    - DISTINCT で重複排除
+    """
+    current_user_obj = get_current_user()
+    if not current_user_obj:
+        return jsonify({"status": "error", "message": "認証情報が無効です。"}), 401
+
+    try:
+        rows = (
+            db.session.query(Material.storage_place)
+            .filter(
+                Material.user_id == current_user_obj.id,
+                Material.deleted == False,
+                Material.storage_place.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+
+        storage_places = []
+        for (sp,) in rows:
+            if sp and str(sp).strip():
+                storage_places.append(str(sp).strip())
+
+        # 念のため set + sort
+        storage_places = sorted(list(set(storage_places)))
+
+        return jsonify({
+            "status": "success",
+            "count": len(storage_places),
+            "storage_places": storage_places,
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching storage_place list: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": "storage_place の取得でエラーが発生しました。"
+        }), 500
+
+def material_to_give_json(m: Material, include_user: bool = True):
+    # ✅ to_dict() から必ず pre_completed が入る
+    d = m.to_dict(include_user=include_user)
+
+    # --- image_url を必ず付与 ---
+    img = getattr(m, "image", None)
+    if img:
+        if isinstance(img, str) and img.startswith(("http://", "https://")):
+            d["image_url"] = img
+        else:
+            d["image_url"] = build_s3_url(img)
+    else:
+        d["image_url"] = build_s3_url("materials/no_image.png")
+
+    # --- Flutter側は lat/lng を読むので合わせる ---
+    d["lat"] = m.latitude
+    d["lng"] = m.longitude
+
+    # --- storage_place はモデルにあるので念のため空対策 ---
+    d["storage_place"] = m.storage_place or ""
+
+    # =========================================================
+    # ✅ グループ情報（削除済みグループは “表示しない + group_idも返さない”）
+    # =========================================================
+    grp = getattr(m, "group", None)
+
+    # deleted_at があるグループは削除済みなので無視する
+    is_active_group = bool(grp) and getattr(grp, "deleted_at", None) is None
+
+    if is_active_group:
+        d["group_name"] = getattr(grp, "name", None)
+        # 必要なら追加で返してもOK（Flutter側で使える）
+        d["group"] = {
+            "id": getattr(grp, "id", None),
+            "name": getattr(grp, "name", None),
+            "deleted_at": None,
+        }
+    else:
+        # ✅ 削除済み or そもそも無所属
+        d["group_name"] = None
+        d["group"] = None
+        d["group_id"] = None  # ✅ 追加：削除済みグループは痕跡ごと消す
+
+    # ✅ 念のため camelCase も返す（GiveMaterial.fromJson 対策）
+    d["preCompleted"] = bool(d.get("pre_completed", False))
+
+    return d
+
+
+def user_to_wanted_user_dict(u: User) -> dict:
+    return {
+        "id": u.id,
+        "email": getattr(u, "email", None),
+        "company_name": getattr(u, "company_name", None),
+        "prefecture": getattr(u, "prefecture", None),
+        "city": getattr(u, "city", None),
+        "address": getattr(u, "address", None),
+        "business_structure": getattr(u, "business_structure", None),
+        "industry": getattr(u, "industry", None),
+        "job_title": getattr(u, "job_title", None),
+    }
+
+
+def wanted_material_to_json(
+    wm: WantedMaterial,
+    user_dict: dict,
+    group_name_map: dict[int, str]
+):
+    raw_gid = getattr(wm, "group_id", None)
+    group_name = group_name_map.get(raw_gid) if raw_gid else None
+
+    # ✅ 削除済みグループは group_name_map に存在しない → group_id も潰す
+    group_id = raw_gid if group_name else None
+
+    return {
+        "id": wm.id,
+        "type": wm.type,
+        "wood_type": getattr(wm, "wood_type", None),
+        "board_material_type": getattr(wm, "board_material_type", None),
+        "panel_type": getattr(wm, "panel_type", None),
+
+        "size_1": float(getattr(wm, "size_1", 0.0) or 0.0),
+        "size_2": float(getattr(wm, "size_2", 0.0) or 0.0),
+        "size_3": float(getattr(wm, "size_3", 0.0) or 0.0),
+
+        "quantity": int(getattr(wm, "quantity", 0) or 0),
+
+        "deadline": wm.deadline.isoformat() if getattr(wm, "deadline", None) else None,
+        "created_at": wm.created_at.isoformat() if getattr(wm, "created_at", None) else None,
+
+        "exclude_weekends": bool(getattr(wm, "exclude_weekends", False)),
+        "note": (getattr(wm, "note", None) or ""),
+        "location": (getattr(wm, "location", None) or ""),
+
+        # ✅ フィルターに必要
+        "matched": bool(getattr(wm, "matched", False)),
+        "completed": bool(getattr(wm, "completed", False)),
+        "deleted": bool(getattr(wm, "deleted", False)),
+
+        # ✅ グループ（Flutterが無視してもOK）
+        "group_id": group_id,
+        "group_name": group_name,
+
+        # ✅ user（WantedUserモデルで読む）
+        "user": user_dict,
+    }
+
+
+@api_materials_bp.route('/my-provided', methods=['GET'])
+@jwt_required()
+def my_provided_materials():
+    current_user_obj = get_current_user()
+    if not current_user_obj:
+        return jsonify({"status": "error", "message": "認証情報が無効です。"}), 401
+
+    try:
+        mats = (
+            Material.query
+            .options(joinedload(Material.owner), joinedload(Material.group))
+            .filter(
+                Material.user_id == current_user_obj.id,
+                Material.deleted == False,
+                Material.pre_completed == False,
+            )
+            .order_by(Material.created_at.desc())
+            .all()
+        )
+
+        materials_json = [
+            material_to_give_json(m, include_user=True)
+            for m in mats
+        ]
+
+        return jsonify({
+            "status": "success",
+            "count": len(materials_json),
+            "materials": materials_json,
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching my-provided: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": "提供した資材一覧の取得でエラーが発生しました。"
+        }), 500
+
+
+@api_materials_bp.route('/my-wanted', methods=['GET'])
+@jwt_required()
+def my_wanted_materials():
+    current_user_obj = get_current_user()
+    if not current_user_obj:
+        return jsonify({"status": "error", "message": "認証情報が無効です。"}), 401
+
+    try:
+        wms = (
+            WantedMaterial.query
+            .filter(
+                WantedMaterial.user_id == current_user_obj.id,
+                WantedMaterial.deleted == False,
+            )
+            .order_by(WantedMaterial.created_at.desc())
+            .all()
+        )
+
+        # ✅ group_id がある場合だけまとめて group_name を取る（N+1防止）
+        group_ids = []
+        for wm in wms:
+            gid = getattr(wm, "group_id", None)
+            if gid:
+                group_ids.append(gid)
+
+        group_name_map = {}
+        if group_ids:
+            groups = (
+                UserGroup.query
+                .filter(
+                    UserGroup.id.in_(list(set(group_ids))),
+                    UserGroup.deleted_at.is_(None)
+                )
+                .all()
+            )
+            group_name_map = {g.id: g.name for g in groups}
+
+        user_dict = user_to_wanted_user_dict(current_user_obj)
+
+        materials_json = [
+            wanted_material_to_json(wm, user_dict, group_name_map)
+            for wm in wms
+        ]
+
+        return jsonify({
+            "status": "success",
+            "count": len(materials_json),
+            "materials": materials_json,
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching my-wanted: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": "ほしい資材一覧の取得でエラーが発生しました。"
+        }), 500

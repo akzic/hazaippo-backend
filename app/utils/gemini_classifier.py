@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 _API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=_API_KEY)
 
-# ── 使用モデルを決定（2.0-flash が無ければ 1.5-flash）────────────
+# ── 使用モデルを決定（2.5-flash が無ければ 2.0-flash）────────────
 def _best_flash() -> str:
     try:
         models = [m.name for m in genai.list_models() if m.name.endswith("-flash")]
         if not models:
-            return "models/gemini-2.0-flash"
+            return "models/gemini-2.5-flash"
         def ver(m): return float(re.search(r'(\d+(?:\.\d+)?)', m).group(1))
         return max(models, key=ver)
     except Exception as e:
         logger.warning(f"モデル一覧取得失敗: {e}")
-        return "models/gemini-2.0-flash"
+        return "models/gemini-2.5-flash"
 
 _MODEL_ID = _best_flash()
 logger.info(f"★ 使用モデル: {_MODEL_ID}")

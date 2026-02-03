@@ -81,6 +81,7 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(256), nullable=False)
+    company_code = db.Column(db.String(24), nullable=True)
     company_name = db.Column(db.String(120), nullable=False)
     prefecture = db.Column(db.String(20), nullable=False)
     city = db.Column(db.String(100), nullable=False)
@@ -103,6 +104,7 @@ class User(db.Model, UserMixin):
         MutableList.as_mutable(ARRAY(db.String)),
         nullable=True
     )
+    image = db.Column(db.String(255), nullable=True)
     # リレーションシップ
     materials = db.relationship('Material', back_populates='owner', lazy=True)
     wanted_materials = db.relationship('WantedMaterial', back_populates='owner', lazy=True)
@@ -154,9 +156,11 @@ class User(db.Model, UserMixin):
         return f"<User {self.email}>"
 
     def to_dict(self):
+        image_url = build_s3_url(self.image) if self.image else None
         return {
             'id': self.id,
             'email': self.email,
+            'company_code': self.company_code,
             'company_name': self.company_name,
             'prefecture': self.prefecture,
             'city': self.city,
@@ -175,54 +179,75 @@ class User(db.Model, UserMixin):
             'is_admin': self.is_admin,
             'last_seen': self.last_seen.isoformat() if self.last_seen else None,
             'business_structure': self.business_structure,
+            'image': image_url,
+            'image_key': self.image,
         }
 
 # Materialモデル
 class Material(db.Model):
     __tablename__ = 'materials'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True
+    )
+
     type = db.Column(db.String(100), nullable=False)
     size_1 = db.Column(db.Float, nullable=False)
     size_2 = db.Column(db.Float, nullable=False)
     size_3 = db.Column(db.Float, nullable=False)
+
     location = db.Column(db.String(200), nullable=False, default="")
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+
     quantity = db.Column(db.Integer, nullable=False)
     deadline = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
     exclude_weekends = db.Column(db.Boolean, nullable=False, default=False)
+
     image = db.Column(db.String(200), nullable=True, default='no_image.png')
     note = db.Column(db.Text, nullable=True)
+
+    title = db.Column(db.String(200), nullable=False, default='')
+    tags = db.Column(db.String(255), nullable=True)
+
     matched = db.Column(db.Boolean, default=False)
     matched_at = db.Column(db.DateTime, nullable=True)
+
     completed = db.Column(db.Boolean, default=False)
     completed_at = db.Column(db.DateTime, nullable=True)
-    pre_completed    = db.Column(db.Boolean, default=False)
+
+    pre_completed = db.Column(db.Boolean, default=False)
     pre_completed_at = db.Column(db.DateTime, nullable=True)
+
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(JST))
+
     deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
 
-    # 新しく追加されたカラム: site_id
     site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
     site = db.relationship('Site', back_populates='materials')
 
-    # 新しいカラムの追加
     wood_type = db.Column(db.String(50), nullable=True)
     board_material_type = db.Column(db.String(50), nullable=True)
     panel_type = db.Column(db.String(50), nullable=True)
 
-    # 新規追加: m_prefecture, m_city, m_address
     m_prefecture = db.Column(db.String(20), nullable=False, default='')
     m_city = db.Column(db.String(100), nullable=False, default='')
     m_address = db.Column(db.String(200), nullable=False, default='')
+
+    storage_place = db.Column(db.String(100), nullable=False, default='')
 
     # リレーションシップ
     owner = db.relationship('User', back_populates='materials')
     requests = db.relationship('Request', back_populates='material', lazy=True)
 
-    group_id = db.Column(db.Integer,
-                         db.ForeignKey('user_groups.id'),
-                         nullable=True)
+    group_id = db.Column(
+        db.Integer,
+        db.ForeignKey('user_groups.id'),
+        nullable=True
+    )
     group = db.relationship('UserGroup', backref='materials')
 
     def __repr__(self):
@@ -237,40 +262,60 @@ class Material(db.Model):
             'size_2': self.size_2,
             'size_3': self.size_3,
             'location': self.location,
+            'latitude': self.latitude,
+            'longitude': self.longitude,
             'quantity': self.quantity,
-            'deadline': self.deadline.isoformat(),
+
+            # ✅ 念のため deadline が None の可能性にも耐える
+            'deadline': self.deadline.isoformat() if self.deadline else None,
+
             'exclude_weekends': self.exclude_weekends,
             'image': self.image,
             'note': self.note,
+            'title': self.title,
+            'tags': self.tags,
+
             'matched': self.matched,
             'matched_at': self.matched_at.isoformat() if self.matched_at else None,
+
             'completed': self.completed,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
-            'created_at': self.created_at.isoformat(),
+
+            # ✅ 追加：pre_completed を返す
+            'pre_completed': self.pre_completed,
+            'pre_completed_at': self.pre_completed_at.isoformat() if self.pre_completed_at else None,
+
+            'created_at': self.created_at.isoformat() if self.created_at else None,
             'deleted': self.deleted,
             'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,
+
             'site_id': self.site_id,
             'wood_type': self.wood_type,
             'board_material_type': self.board_material_type,
             'panel_type': self.panel_type,
+
             'm_prefecture': self.m_prefecture,
             'm_city': self.m_city,
             'm_address': self.m_address,
+
+            'storage_place': self.storage_place,
             'group_id': self.group_id,
         }
+
         if include_user:
             d['user'] = self.owner.to_dict() if self.owner else None
+
         return d
 
-@property
-def image_url(self) -> str:
-    """
-    DB に保存されているオブジェクトキーからフル URL を返す
-     テンプレート側は material.image_url を使えば移行コスト 0
-    """
-    if not self.image or self.image == 'no_image.png':
-        return build_s3_url('materials/no_image.png')
-    return build_s3_url(self.image)
+    @property
+    def image_url(self) -> str:
+        """
+        DB に保存されているオブジェクトキーからフル URL を返す
+        テンプレート側は material.image_url を使えば移行コスト 0
+        """
+        if not self.image or self.image == 'no_image.png':
+            return build_s3_url('materials/no_image.png')
+        return build_s3_url(self.image)
 
 # WantedMaterialモデル
 class WantedMaterial(db.Model):
@@ -790,6 +835,10 @@ class UserGroup(db.Model):
                             default=datetime.now(JST),
                             nullable=False)
     deleted_at  = db.Column(db.DateTime(timezone=True))
+    group_name    = db.Column(db.String(100), nullable=True)
+    group_image   = db.Column(db.String(255), nullable=True)
+    cover_image   = db.Column(db.String(255), nullable=True)
+    group_color   = db.Column(db.BigInteger, nullable=True)
 
     # ───── リレーション ─────
     owner   = db.relationship("User",
@@ -832,3 +881,15 @@ class GroupMembership(db.Model):
     group = db.relationship("UserGroup", back_populates="members")
     user  = db.relationship("User",
                             backref="group_memberships")
+
+class Inquiry(db.Model):
+    __tablename__ = "inquiries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(255), nullable=False)
+    phone = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    source = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(JST), nullable=False)

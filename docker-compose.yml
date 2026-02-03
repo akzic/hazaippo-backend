@@ -28,6 +28,7 @@ services:
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
+      - PORT=80
       - GOOGLE_APPLICATION_CREDENTIALS=/app/config/hazaippo-firebase-adminsdk-fbsvc-571f320be7.json
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:

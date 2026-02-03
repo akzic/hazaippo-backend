@@ -1,13 +1,13 @@
 # app/api/api_requests.py
 
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
+from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token, verify_jwt_in_request
 from app import db
 from app.models import Material, WantedMaterial, Request, User, Conversation
 from datetime import datetime
 import pytz
 import logging
-from sqlalchemy import or_, exists
+from sqlalchemy import or_, exists, func
 from sqlalchemy.orm import aliased, joinedload
 from app.blueprints.utils import log_user_activity
 from app.blueprints.email_notifications import (
@@ -28,12 +28,57 @@ api_requests_bp = Blueprint('api_requests', __name__, url_prefix='/api/requests'
 JST = pytz.timezone('Asia/Tokyo')
 logger = logging.getLogger(__name__)
 
+# image が「S3キー」だった時に URL 化できるならする（無くても落とさない）
+try:
+    from app.utils.s3_uploader import build_s3_url  # type: ignore
+except Exception:
+    build_s3_url = None
 
 def get_current_user():
     """JWTからユーザーIDを取得し、DBからユーザー情報をロードする"""
     user_id = get_jwt_identity()
     return User.query.get(user_id)
 
+def _normalize_image_url(raw):
+    """
+    User.image が URL の場合はそのまま返す。
+    URL でなければ build_s3_url があれば使う。
+    どちらも無理なら文字列として返す（nullも許容）
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.startswith("http://") or s.startswith("https://"):
+        return s
+    if build_s3_url:
+        try:
+            return build_s3_url(s)
+        except Exception:
+            return s
+    return s
+
+def user_to_dict(u: User):
+    """Flutter の RequestUser に合わせた dict（image を追加）"""
+    if u is None:
+        return None
+    # 画像カラム名が揺れても落ちないように（image / image_url 想定）
+    raw_image = getattr(u, "image", None)
+    if raw_image is None:
+        raw_image = getattr(u, "image_url", None)
+    return {
+        'id': u.id,
+        'email': u.email,
+        'company_name': u.company_name,
+        'prefecture': u.prefecture,
+        'city': u.city,
+        'address': u.address,
+        'business_structure': u.business_structure,
+        'industry': u.industry,
+        'job_title': u.job_title,
+        'image': _normalize_image_url(raw_image),  # ★追加
+    }
 
 # ヘルパー関数：WantedMaterial オブジェクトを辞書形式に変換
 def wanted_material_to_dict(wm):
@@ -68,6 +113,73 @@ def wanted_material_to_dict(wm):
         } if wm.owner else None,
     }
 
+# 現在のユーザー視点の資材リクエスト状況をまとめて返すヘルパー
+def _get_material_request_stats(material, requester_user_id=None):
+    """
+    material: Material オブジェクト
+    requester_user_id: ログインユーザーID（None の場合は has_requested は常に False）
+    戻り値:
+      {
+        'material_id': ...,
+        'total_requests': int,
+        'pending_requests': int,
+        'has_requested': bool,
+        'request_id': int or None,
+        'has_rejected': bool,
+        'rejected_request_id': int or None,
+        'rejected_at': str or None,
+      }
+    """
+    # 全ステータスのリクエスト数
+    total_requests = db.session.query(func.count(Request.id)).filter(
+        Request.material_id == material.id
+    ).scalar()
+
+    # Pending のリクエスト数
+    pending_requests = db.session.query(func.count(Request.id)).filter(
+        Request.material_id == material.id,
+        Request.status == "Pending"
+    ).scalar()
+
+    has_requested = False
+    current_request_id = None
+    has_rejected = False
+    rejected_request_id = None
+    rejected_at = None
+
+    if requester_user_id is not None:
+        my_req = Request.query.filter_by(
+            material_id=material.id,
+            requester_user_id=requester_user_id,
+            status="Pending"
+        ).first()
+        if my_req:
+            has_requested = True
+            current_request_id = my_req.id
+
+        # ★ 自分の Rejected（直近）も拾う（cancel_request 由来で rejected_at が null の場合もあるので id も併用）
+        my_rejected = (Request.query
+                       .filter_by(material_id=material.id,
+                                  requester_user_id=requester_user_id,
+                                  status="Rejected")
+                       .order_by(Request.rejected_at.desc(), Request.id.desc())
+                       .first())
+        if my_rejected:
+            has_rejected = True
+            rejected_request_id = my_rejected.id
+            ra = getattr(my_rejected, "rejected_at", None)
+            rejected_at = ra.isoformat() if ra else None
+
+    return {
+         'material_id': material.id,
+         'total_requests': total_requests,
+         'pending_requests': pending_requests,
+         'has_requested': has_requested,
+         'request_id': current_request_id,
+         'has_rejected': has_rejected,
+         'rejected_request_id': rejected_request_id,
+         'rejected_at': rejected_at,
+    }
 
 # ─── 資材リクエスト（材料） ─────────────────────────────
 @api_requests_bp.route("/request_material/<int:material_id>", methods=['POST'])
@@ -78,6 +190,21 @@ def request_material(material_id):
 
     if material.user_id == current_user.id:
         return jsonify({'status': 'error', 'message': '自分の材料にリクエストを送ることはできません。'}), 400
+
+    # すでに同じ資材に Pending のリクエストを出している場合は二重送信させない
+    existing_req = Request.query.filter_by(
+        material_id=material_id,
+        requester_user_id=current_user.id,
+        status='Pending'
+    ).first()
+    if existing_req:
+        stats = _get_material_request_stats(material, requester_user_id=current_user.id)
+        return jsonify({
+            'status': 'error',
+            'message': 'この資材にはすでにリクエストを送信済みです。',
+            'request_id': existing_req.id,
+            **stats,
+        }), 400
 
     new_request = Request(
         material_id=material_id,
@@ -91,23 +218,35 @@ def request_material(material_id):
     send_request_push(new_request)
 
     log_user_activity(
-        current_user.id, 
+        current_user.id,
         '材料リクエスト送信',
         f'ユーザーが材料ID: {material_id} のリクエストを送信しました。',
-        request.remote_addr, 
-        request.user_agent.string, 
+        request.remote_addr,
+        request.user_agent.string,
         'N/A'
     )
 
     requested_user = User.query.get(material.user_id)
     if requested_user.without_approval:
         try:
+            # 既に別のリクエストが承諾/完了されている場合は「自動承諾」しない（Pending のまま保留）
+            existing_match = Request.query.filter(
+                Request.material_id == material_id,
+                Request.status.in_(["Accepted", "Completed"])
+            ).first()
+            if existing_match:
+                stats = _get_material_request_stats(material, requester_user_id=current_user.id)
+                return jsonify({
+                    'status': 'success',
+                    'message': '資材のリクエストが送信されました。（現在別のリクエストを承諾中のため保留中です）',
+                    'request_id': new_request.id,
+                    **stats,
+                }), 200
             new_request.status = 'Accepted'
             new_request.matched = True
             new_request.matched_at = datetime.now(JST)
             material.matched = True
             material.matched_at = datetime.now(JST)
-            new_request.reject_other_requests()
             db.session.commit()
             send_request_push(new_request, auto_accepted=True)
 
@@ -115,7 +254,15 @@ def request_material(material_id):
                 raise Exception("承認通知メールの送信に失敗しました。")
             if not send_accept_request_to_sender_email(requester=current_user, material=material, accepted_user=requested_user):
                 raise Exception("リクエスト受け取り側への承認通知メールの送信に失敗しました。")
-            return jsonify({'status': 'success', 'message': 'リクエストが自動承認され、マッチングが完了しました。'}), 200
+
+            # 自動承認後の最新ステータスを返す
+            stats = _get_material_request_stats(material, requester_user_id=current_user.id)
+            return jsonify({
+                'status': 'success',
+                'message': 'リクエストが自動承認され、マッチングが完了しました。',
+                'request_id': new_request.id,
+                **stats,
+            }), 200
 
         except Exception as e:
             logger.error(f"自動承認時のエラー: {e}")
@@ -134,7 +281,14 @@ def request_material(material_id):
             db.session.commit()
             return jsonify({'status': 'error', 'message': 'リクエストの送信に失敗しました。もう一度お試しください。'}), 500
 
-    return jsonify({'status': 'success', 'message': '資材のリクエストが送信されました。'}), 200
+    # 通常パターンの成功レスポンス（件数＋has_requested 付き）
+    stats = _get_material_request_stats(material, requester_user_id=current_user.id)
+    return jsonify({
+        'status': 'success',
+        'message': '資材のリクエストが送信されました。',
+        'request_id': new_request.id,
+        **stats,
+    }), 200
 
 
 # ─── 資材リクエスト（希望材料） ─────────────────────────────
@@ -228,10 +382,22 @@ def accept_request_material(request_id):
     if material_request.status != 'Pending':
         return jsonify({'status': 'error', 'message': '承認できるのは保留中のリクエストのみです。'}), 400
 
+    # 既に同一資材で承諾/完了があるなら二重承諾させない
+    if material_request.material_id is not None:
+        existing_match = Request.query.filter(
+            Request.material_id == material_request.material_id,
+            Request.status.in_(["Accepted", "Completed"]),
+            Request.id != material_request.id
+        ).first()
+        if existing_match:
+            return jsonify({
+                'status': 'error',
+                'message': '既に別のリクエストを承諾中です。キャンセル後に受け入れてください。'
+            }), 400
+
     try:
         # 1) リクエスト承認処理
         material_request.accept()
-        material_request.reject_other_requests()
         db.session.commit()
         send_accept_push(material_request)
 
@@ -482,7 +648,10 @@ def cancel_request(request_id):
     current_user = get_current_user()
     req_obj = Request.query.get_or_404(request_id)
 
-    logger.debug(f"Cancel request endpoint: Request ID {request_id}, current_user.id: {current_user.id}, req_obj.requester_user_id: {req_obj.requester_user_id}, req_obj.status: {req_obj.status}")
+    logger.debug(
+        f"Cancel request endpoint: Request ID {request_id}, current_user.id: {current_user.id}, "
+        f"req_obj.requester_user_id: {req_obj.requester_user_id}, req_obj.status: {req_obj.status}"
+    )
 
     if req_obj.requester_user_id != current_user.id:
         logger.debug("キャンセル権限がありません。")
@@ -491,7 +660,12 @@ def cancel_request(request_id):
         logger.debug(f"キャンセル不可: 現在のリクエスト状態は {req_obj.status} です。")
         return jsonify({'status': 'error', 'message': 'キャンセルできるのは保留中のリクエストのみです。'}), 400
 
+    related_material = req_obj.material  # Material に紐づくリクエストならここに入る
+
     req_obj.status = 'Rejected'
+    # ★ cancel でも rejected_at を埋める（存在しないモデルなら落とさない）
+    if hasattr(req_obj, "rejected_at"):
+        req_obj.rejected_at = datetime.now(JST)
     db.session.commit()
     log_user_activity(
         current_user.id,
@@ -501,7 +675,18 @@ def cancel_request(request_id):
         request.user_agent.string,
         'N/A'
     )
-    return jsonify({'status': 'success', 'message': 'リクエストを取り消しました。'}), 200
+
+    response = {
+        'status': 'success',
+        'message': 'リクエストを取り消しました。',
+    }
+
+    # Material に紐づくリクエストだった場合は、統計情報も返す
+    if related_material is not None:
+        stats = _get_material_request_stats(related_material, requester_user_id=current_user.id)
+        response.update(stats)
+
+    return jsonify(response), 200
 
 @api_requests_bp.route("/sent_requests_give", methods=['GET'])
 @jwt_required()
@@ -510,30 +695,108 @@ def get_sent_requests_give():
     現在のユーザーが送信した「提供材料リクエスト」を取得するエンドポイント。
     Request テーブルから、requester_user_id == current_user.id かつ
     material_id が NOT NULL のレコードを取得します。
+
+    追加で以下も返す（フロントが状態判定しやすいように）:
+      - give_material.pre_completed / give_material.completed
+      - top-level material_pre_completed / material_completed
+      - （任意）top-level material_is_matched / material_matched_* など
     """
     current_user = get_current_user()
 
-    # give_material_id は無いので material_id を参照
-    sent_requests = Request.query.filter(
-        Request.requester_user_id == current_user.id,
-        Request.material_id.isnot(None),
-        Request.status == "Pending"
-    ).all()
+    sent_requests = (
+        Request.query
+        .options(
+            joinedload(Request.material).joinedload(Material.owner),
+        )
+        .filter(
+            Request.requester_user_id == current_user.id,
+            Request.material_id.isnot(None)
+        )
+        .order_by(Request.requested_at.desc())
+        .all()
+    )
+
+    # --- material_id ごとに「現在のマッチ（Accepted/Completed）」を集計（任意だけど便利） ---
+    material_ids = sorted({r.material_id for r in sent_requests if r.material_id is not None})
+
+    matched_map = {}  # material_id -> {'request_id': int, 'status': str}
+    if material_ids:
+        rows = (
+            db.session.query(
+                Request.material_id,
+                Request.id,
+                Request.status,
+            )
+            .filter(
+                Request.material_id.in_(material_ids),
+                Request.status.in_(["Accepted", "Completed"])
+            )
+            .all()
+        )
+
+        # Completed を優先（あれば Completed を採用、なければ Accepted）
+        for material_id, req_id, status in rows:
+            if material_id is None or req_id is None:
+                continue
+
+            existing = matched_map.get(material_id)
+            if existing is None:
+                matched_map[material_id] = {"request_id": req_id, "status": str(status)}
+                continue
+
+            # 優先順位: Completed > Accepted
+            if existing["status"] != "Completed" and str(status) == "Completed":
+                matched_map[material_id] = {"request_id": req_id, "status": "Completed"}
+            elif existing["status"] == str(status) and req_id > existing["request_id"]:
+                matched_map[material_id] = {"request_id": req_id, "status": str(status)}
 
     result = []
     for req in sent_requests:
         req_dict = req.to_dict()
-        # リクエストに紐づく material (提供資材) があれば dict 化して格納
-        if req.material:
-            # ここでユーザー情報も含めて返したい場合は、
-            # 既存の material.to_dict() に加えて、owner ユーザー情報も付ける。
-            mat_dict = req.material.to_dict()
 
-            # owner(User) の to_dict() を追加したい場合
-            mat_dict['user'] = req.material.owner.to_dict() if req.material.owner else None
+        # ★ Rejected もフロントが確実に拾えるように明示
+        req_dict.update({
+            "is_rejected": (req.status == "Rejected"),
+            "rejected_at": (req.rejected_at.isoformat() if getattr(req, "rejected_at", None) else None),
+        })
 
-            # フロント側で "give_material" というキーで受け取る想定なら:
+        mat = req.material
+        if mat:
+            # Material 側の一次完了／完了フラグ
+            material_pre_completed = bool(getattr(mat, "pre_completed", False))
+            material_completed = bool(getattr(mat, "completed", False))
+
+            # “現在のマッチ”情報（Accepted/Completed が存在するか）
+            matched_info = matched_map.get(mat.id)
+            material_is_matched = matched_info is not None
+            material_matched_request_id = matched_info["request_id"] if matched_info else None
+            material_matched_status = matched_info["status"] if matched_info else None
+
+            # Material dict
+            mat_dict = mat.to_dict()
+
+            # owner(User) も入れる（画像URL正規化つき）
+            mat_dict['user'] = user_to_dict(mat.owner) if mat.owner else None
+
+            # give_material 内に状態を同梱（フロントが取りやすい）
+            mat_dict.update({
+                "is_matched": material_is_matched,
+                "matched_request_id": material_matched_request_id,
+                "matched_status": material_matched_status,
+                "pre_completed": material_pre_completed,
+                "completed": material_completed,
+            })
+
             req_dict['give_material'] = mat_dict
+
+            # ★トップレベルにも同じ情報を付与（フロント判定が一気にラク）
+            req_dict.update({
+                "material_is_matched": material_is_matched,
+                "material_matched_request_id": material_matched_request_id,
+                "material_matched_status": material_matched_status,
+                "material_pre_completed": material_pre_completed,
+                "material_completed": material_completed,
+            })
 
         result.append(req_dict)
 
@@ -569,33 +832,128 @@ def get_received_requests_give():
     現在のユーザーが受信した「提供材料のリクエスト」を取得するエンドポイント。
     リクエストテーブルから、requested_user_id == current_user.id かつ
     material_id が NOT NULL のレコードを返します。
+
+    追加で以下も返す（親画面で状態判定できるように）:
+      - material_is_matched: 資材がマッチ済みか（Accepted/Completed が存在）
+      - material_matched_request_id / material_matched_status: 資材の“現在のマッチ”のリクエストIDと状態
+      - is_this_request_matched: この req が“現在のマッチ”本人か
+      - material_pre_completed / material_completed: 資材の一次完了／完全完了フラグ
     """
     current_user = get_current_user()
-    received_requests = Request.query.filter(
-        Request.requested_user_id == current_user.id,
-        Request.material_id.isnot(None)
-    ).all()
+
+    received_requests = (
+        Request.query
+        .options(
+            joinedload(Request.material).joinedload(Material.owner),
+            joinedload(Request.requester_user),
+        )
+        .filter(
+            Request.requested_user_id == current_user.id,
+            Request.material_id.isnot(None)
+        )
+        .all()
+    )
+
+    # --- 資材IDごとに「現在のマッチ（Accepted/Completed）」を集計 ---
+    material_ids = sorted({r.material_id for r in received_requests if r.material_id is not None})
+
+    matched_map = {}  # material_id -> {'request_id': int, 'status': str}
+    if material_ids:
+        rows = (
+            db.session.query(
+                Request.material_id,
+                Request.id,
+                Request.status,
+            )
+            .filter(
+                Request.material_id.in_(material_ids),
+                Request.status.in_(["Accepted", "Completed"])
+            )
+            .all()
+        )
+
+        # Completed を優先（あれば Completed を採用、なければ Accepted）
+        for material_id, req_id, status in rows:
+            if material_id is None or req_id is None:
+                continue
+
+            existing = matched_map.get(material_id)
+            if existing is None:
+                matched_map[material_id] = {"request_id": req_id, "status": str(status)}
+                continue
+
+            # 優先順位: Completed > Accepted
+            if existing["status"] != "Completed" and str(status) == "Completed":
+                matched_map[material_id] = {"request_id": req_id, "status": "Completed"}
+            elif existing["status"] == str(status) and req_id > existing["request_id"]:
+                # 同じステータスなら最新っぽい方（idが大きい方）を採用
+                matched_map[material_id] = {"request_id": req_id, "status": str(status)}
 
     result = []
     for req in received_requests:
         req_dict = req.to_dict()
-        # Material 情報を辞書化
-        if req.material:
-            req_dict['give_material'] = material_to_dict(req.material)
+
+        # ★ Rejected もフロントが確実に拾えるように明示
+        req_dict.update({
+            "is_rejected": (req.status == "Rejected"),
+            "rejected_at": (req.rejected_at.isoformat() if getattr(req, "rejected_at", None) else None),
+        })
+
+        # 資材の状態フラグ（pre/complete は Material 側）
+        mat = req.material
+        material_id = req.material_id
+        matched_info = matched_map.get(material_id) if material_id is not None else None
+
+        material_is_matched = matched_info is not None
+        material_matched_request_id = matched_info["request_id"] if matched_info else None
+        material_matched_status = matched_info["status"] if matched_info else None
+        is_this_request_matched = (
+            True if (matched_info and req.id == matched_info["request_id"]) else False
+        )
+
+        material_pre_completed = bool(getattr(mat, "pre_completed", False)) if mat else False
+        material_completed = bool(getattr(mat, "completed", False)) if mat else False
+
+        # Material 情報を辞書化（必要ならここにフラグも同梱）
+        if mat:
+            mat_dict = material_to_dict(mat)
+            mat_dict.update({
+                "is_matched": material_is_matched,
+                "matched_request_id": material_matched_request_id,
+                "matched_status": material_matched_status,
+                "pre_completed": material_pre_completed,
+                "completed": material_completed,
+            })
+            req_dict["give_material"] = mat_dict
 
         # リクエスト送信者
         if req.requester_user:
-            req_dict['requester_user'] = {
-                'id': req.requester_user.id,
-                'email': req.requester_user.email,
-                'company_name': req.requester_user.company_name,
-                'prefecture': req.requester_user.prefecture,
-                'city': req.requester_user.city,
-                'address': req.requester_user.address,
-                'business_structure': req.requester_user.business_structure,
-                'industry': req.requester_user.industry,
-                'job_title': req.requester_user.job_title,
+            req_dict["requester_user"] = {
+                "id": req.requester_user.id,
+                "email": req.requester_user.email,
+                "company_name": req.requester_user.company_name,
+                "prefecture": req.requester_user.prefecture,
+                "city": req.requester_user.city,
+                "address": req.requester_user.address,
+                "business_structure": req.requester_user.business_structure,
+                "industry": req.requester_user.industry,
+                "job_title": req.requester_user.job_title,
+                "image": _normalize_image_url(
+                    getattr(req.requester_user, "image", None)
+                    or getattr(req.requester_user, "image_url", None)
+                ),
             }
+
+        # ★このAPIだけで判定できるように “トップレベル” にも同じ情報を付与
+        req_dict.update({
+            "material_is_matched": material_is_matched,
+            "material_matched_request_id": material_matched_request_id,
+            "material_matched_status": material_matched_status,
+            "is_this_request_matched": is_this_request_matched,
+            "material_pre_completed": material_pre_completed,
+            "material_completed": material_completed,
+        })
+
         result.append(req_dict)
 
     return jsonify(result), 200
@@ -607,17 +965,7 @@ def material_to_dict(mat):
     mat_dict = mat.to_dict()
     # owner ユーザー情報を付加する例（GiveMaterialの user フィールド相当）
     if mat.owner:
-        mat_dict['user'] = {
-            'id': mat.owner.id,
-            'email': mat.owner.email,
-            'company_name': mat.owner.company_name,
-            'prefecture': mat.owner.prefecture,
-            'city': mat.owner.city,
-            'address': mat.owner.address,
-            'business_structure': mat.owner.business_structure,
-            'industry': mat.owner.industry,
-            'job_title': mat.owner.job_title,
-        }
+        mat_dict['user'] = user_to_dict(mat.owner)
     return mat_dict
 
 @api_requests_bp.route("/received_requests_wanted", methods=['GET'])
@@ -866,14 +1214,46 @@ def reject_request_material(request_id):
     ]
     if mat_req.requested_user_id not in ([current_user.id] + same_loc_ids):
         return jsonify({'status': 'error', 'message': 'リクエストを拒否する権限がありません。'}), 403
-    if mat_req.status != 'Pending':
-        return jsonify({'status': 'error', 'message': '拒否できるのは保留中のリクエストのみです。'}), 400
+    # Pending: 通常の拒否
+    # Accepted: “マッチ後キャンセル”（一次完了前のみ）
+    if mat_req.status not in ('Pending', 'Accepted'):
+        return jsonify({'status': 'error', 'message': '拒否（キャンセル）できるのは保留中または承諾済みのリクエストのみです。'}), 400
+    if mat_req.status == 'Accepted':
+        mat = mat_req.material
+        if mat is None:
+            return jsonify({'status': 'error', 'message': '資材情報が見つかりません。'}), 400
+        # 一次完了/最終完了後はキャンセル不可（仕様）
+        if bool(getattr(mat, "pre_completed", False)) or bool(getattr(mat, "completed", False)):
+            return jsonify({'status': 'error', 'message': '一次完了後はリクエストをキャンセルできません。'}), 400
+        # 二重マッチが存在する場合の安全策（基本は accept 側で防ぐ）
+        other_match = Request.query.filter(
+            Request.material_id == mat_req.material_id,
+            Request.status.in_(["Accepted", "Completed"]),
+            Request.id != mat_req.id
+        ).first()
+        if other_match:
+            return jsonify({'status': 'error', 'message': '他の承諾済みリクエストが存在するためキャンセルできません。'}), 400
     # -----------------------------------
 
     try:
         # ステータス更新
         mat_req.status      = 'Rejected'
         mat_req.rejected_at = datetime.now(JST)
+        # “マッチ後キャンセル” の場合は、資材側の matched を戻す
+        if mat_req.status == 'Rejected' and getattr(mat_req, "matched", None) is not None:
+            # Request 側フラグがあるなら戻す（無ければ無視される）
+            try:
+                mat_req.matched = False
+                mat_req.matched_at = None
+            except Exception:
+                pass
+        mat = mat_req.material
+        if mat is not None:
+            try:
+                mat.matched = False
+                mat.matched_at = None
+            except Exception:
+                pass
         db.session.commit()
 
         # --- メール通知（送信者・拒否者） ---
@@ -959,3 +1339,18 @@ def reject_request_wanted(request_id):
         db.session.rollback()
         logger.error(f"希望材料リクエスト拒否エラー: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'リクエストの拒否に失敗しました。'}), 500
+
+# ─── 資材ごとのリクエスト数取得 ─────────────────────────────
+@api_requests_bp.route("/material_request_count/<int:material_id>", methods=['GET'])
+@jwt_required(optional=True)
+def get_material_request_count(material_id):
+    """
+    指定した Material のリクエスト状況を返すエンドポイント。
+    ログイン済みなら「自分が Pending リクエストを出しているか」も含めて返す。
+    """
+    material = Material.query.get_or_404(material_id)
+    user_id = get_jwt_identity()
+
+    # ログインしていなくても _get_material_request_stats は動く（has_requested=False のまま）
+    stats = _get_material_request_stats(material, requester_user_id=user_id)
+    return jsonify(stats), 200

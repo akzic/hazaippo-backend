@@ -154,6 +154,7 @@ def create_app(config_class=Config):
     from app.api.api_utils import api_utils_bp
     from app.api.api_notifications import api_notifications_bp
     from app.api.api_groups import api_groups_bp
+    from app.api.api_inquiries import api_inquiries_bp
 
     # APIブループリントをCSRF保護から除外
     csrf.exempt(api_auth_bp)
@@ -171,6 +172,7 @@ def create_app(config_class=Config):
     csrf.exempt(api_notifications_bp)
     csrf.exempt(assetlinks_bp)
     csrf.exempt(api_groups_bp)
+    csrf.exempt(api_inquiries_bp)
 
     # Blueprintの登録にurl_prefixを追加
     app.register_blueprint(auth_bp)
@@ -202,6 +204,7 @@ def create_app(config_class=Config):
     app.register_blueprint(api_terminal_bp, url_prefix='/api/terminal')
     app.register_blueprint(api_utils_bp, url_prefix='/api/utils')
     app.register_blueprint(api_groups_bp)
+    app.register_blueprint(api_inquiries_bp, url_prefix='/api/inquiries')
 
     # タイムゾーンの設定
     app.config['TIMEZONE'] = timezone('Asia/Tokyo')

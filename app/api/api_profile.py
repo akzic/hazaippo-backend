@@ -96,6 +96,13 @@ def edit_profile():
         # 空文字は None として扱う
         current_user_obj.line_id = data.get('line_id') if data.get('line_id') else None
 
+        # ✅ 法人コード（company_code）を更新できるように追加
+        # 空文字は None にする（= 法人コードなし）
+        if 'company_code' in data:
+            v = data.get('company_code')
+            v = (str(v).strip() if v is not None else '')
+            current_user_obj.company_code = v if v else None
+
         # 個人以外の場合のみ追加フィールドを更新
         if current_user_obj.business_structure != 2:
             current_user_obj.company_phone = data.get('company_phone', current_user_obj.company_phone)
